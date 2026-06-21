@@ -3,14 +3,14 @@
 # ============================================================
 
 # ---------- 窗口设置 ----------
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 480
+SCREEN_HEIGHT = 720
 FPS = 120
 GAME_TITLE = "飞机大战2026"
 
 # ---------- 资源路径 ----------
-IMAGE_PATH = "temp_place_game_assets/"
-SOUND_PATH = "temp_place_music/"
+IMAGE_PATH = "assets/images/"
+SOUND_PATH = "assets/sounds/"
 FONT_PATH = "temp_place_fonts/"
 
 # ============================================================
@@ -59,7 +59,7 @@ IMG_ENEMY_PLANE_3_LOW_LIFE = "enemy_plane_3_low_life.png"
 IMG_ENEMY_PLANE_3_EXPLOSION = "enemy_plane_3_explosion.png"
 
 # --- BOSS ---
-IMG_BOSS_PLANE = "boss_plane.png"
+IMG_BOSS_PLANE = "boss.png"
 IMG_BOSS_PLANE_DAMAGED = "boss_plane_damaged.png"
 IMG_BOSS_PLANE_LOW_LIFE = "boss_plane_low_life.png"
 IMG_BOSS_PLANE_EXPLOSION = "boss_plane_explosion.png"
@@ -73,12 +73,12 @@ BTN_BACK_IMG = IMG_BACK
 BTN_WIDTH = 200
 BTN_HEIGHT = 50
 BTN_CENTER_X = SCREEN_WIDTH // 2
-BTN_Y_RESUME = 250
-BTN_Y_RESTART = 320
-BTN_Y_BACK = 390
+BTN_Y_RESUME = 280
+BTN_Y_RESTART = 350
+BTN_Y_BACK = 420
 
 # ---------- 玩家属性 ----------
-PLAYER_INIT_HP = 3          # 初始生命值
+PLAYER_INIT_HP = 5          # 初始生命值
 PLAYER_SPEED = 5            # 移动速度（像素/帧）
 PLAYER_INIT_SCORE = 0       # 初始分数
 PLAYER_INVINCIBLE_TIME = 60 # 受伤后无敌帧数（约1秒）

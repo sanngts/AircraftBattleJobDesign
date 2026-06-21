@@ -8,10 +8,11 @@ from constants import *
 # ============================================================
 
 def _try_load_image(filename, default_size=(50, 50)):
-    """尝试加载图片，不存在则返回带文字标记的占位 surface"""
+    """尝试加载图片并缩放到 default_size，不存在则返回带文字标记的占位 surface"""
     path = os.path.join(IMAGE_PATH, filename)
     try:
         img = pygame.image.load(path).convert_alpha()
+        img = pygame.transform.scale(img, default_size)
         return img
     except (pygame.error, FileNotFoundError):
         # 占位图形：灰色矩形 + 文件名缩写
@@ -46,7 +47,7 @@ class Player(pygame.sprite.Sprite):
             IMG_PLAYER_PLANE_DAMAGED,
             IMG_PLAYER_PLANE_LOW_LIFE,
             IMG_PLAYER_PLANE_EXPLOSION,
-            default_size=(50, 60)
+            default_size=(45, 50)
         )
         self.image = self.images["normal"]
         self.rect = self.image.get_rect()
@@ -258,13 +259,13 @@ class EnemyType:
                1, (2, 4), 10, False, (30, 30))
     ENEMY_2 = ("enemy_2", IMG_ENEMY_PLANE_2, IMG_ENEMY_PLANE_2_DAMAGED,
                IMG_ENEMY_PLANE_2_LOW_LIFE, IMG_ENEMY_PLANE_2_EXPLOSION,
-               3, (1, 3), 30, True, (45, 40))
+               3, (1, 3), 30, True, (38, 35))
     ENEMY_3 = ("enemy_3", IMG_ENEMY_PLANE_3, IMG_ENEMY_PLANE_3_DAMAGED,
                IMG_ENEMY_PLANE_3_LOW_LIFE, IMG_ENEMY_PLANE_3_EXPLOSION,
-               5, (1, 2), 60, True, (60, 55))
+               5, (1, 2), 60, True, (50, 45))
     BOSS = ("boss", IMG_BOSS_PLANE, IMG_BOSS_PLANE_DAMAGED,
             IMG_BOSS_PLANE_LOW_LIFE, IMG_BOSS_PLANE_EXPLOSION,
-            20, (1, 1), 200, True, (100, 80))
+            20, (1, 1), 200, True, (90, 70))
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -282,7 +283,7 @@ class Enemy(pygame.sprite.Sprite):
         speed_min, speed_max = speed_range
         self.speed_y = random.uniform(speed_min, speed_max)
         self.speed_x = random.uniform(-1, 1) if name != "boss" else random.uniform(-2, 2)
-        self.max_hp = int(hp * difficulty_mult)
+        self.max_hp = max(1, int(hp * difficulty_mult))
         self.hp = self.max_hp
         self.score_value = int(score)
         self.can_shoot = can_shoot

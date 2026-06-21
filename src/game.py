@@ -92,7 +92,7 @@ class Game:
                     sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
-                btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 260, 200, 50)
+                btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 350, 200, 50)
                 if btn_rect.collidepoint(mx, my):
                     self.state = "difficulty"
                     return
@@ -102,12 +102,12 @@ class Game:
         self._draw_stars()
 
         title = self.font_large.render("飞机大战 2026", True, COLOR_GOLD)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 120)))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 160)))
 
         subtitle = self.font_small.render("Aircraft Battle", True, COLOR_WHITE)
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH//2, 180)))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH//2, 220)))
 
-        btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 260, 200, 50)
+        btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 350, 200, 50)
         mx, my = pygame.mouse.get_pos()
         hover = btn_rect.collidepoint(mx, my)
         btn_color = COLOR_BLUE if hover else COLOR_GRAY
@@ -143,7 +143,7 @@ class Game:
                 mx, my = event.pos
                 difficulties = ["简单", "普通", "困难"]
                 for i, diff in enumerate(difficulties):
-                    btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 200 + i * 80, 200, 50)
+                    btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
                     if btn_rect.collidepoint(mx, my):
                         self.difficulty = diff
                         self._init_game()
@@ -155,7 +155,7 @@ class Game:
         self._draw_stars()
 
         title = self.font_large.render("选择难度", True, COLOR_GOLD)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 100)))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 140)))
 
         difficulties = ["简单", "普通", "困难"]
         colors = [COLOR_GREEN, COLOR_BLUE, COLOR_RED]
@@ -163,7 +163,7 @@ class Game:
         mx, my = pygame.mouse.get_pos()
 
         for i, (diff, color, desc) in enumerate(zip(difficulties, colors, descs)):
-            btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 200 + i * 80, 200, 50)
+            btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
             hover = btn_rect.collidepoint(mx, my)
             btn_color = color if not hover else tuple(min(c + 40, 255) for c in color)
             pygame.draw.rect(self.screen, btn_color, btn_rect, border_radius=10)
@@ -171,7 +171,7 @@ class Game:
             btn_text = self.font_medium.render(diff, True, COLOR_WHITE)
             self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
             desc_text = self.font_small.render(desc, True, color)
-            self.screen.blit(desc_text, desc_text.get_rect(center=(SCREEN_WIDTH//2, 230 + i * 80)))
+            self.screen.blit(desc_text, desc_text.get_rect(center=(SCREEN_WIDTH//2, 280 + i * 90)))
 
         tip = self.font_small.render("按 ESC 返回主菜单", True, COLOR_GRAY)
         self.screen.blit(tip, tip.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 40)))
@@ -368,16 +368,16 @@ class Game:
         # Boss击杀数
         if self.boss_kill_count > 0:
             boss_text = self.font_small.render(f"击败Boss: {self.boss_kill_count}", True, COLOR_GOLD)
-            self.screen.blit(boss_text, (SCREEN_WIDTH - 200, 10))
+            self.screen.blit(boss_text, (SCREEN_WIDTH - 120, 10))
 
         # 关卡/难度
         level_text = self.font_small.render(f"关卡: {self.current_level}  难度: {self.difficulty}", True, COLOR_GRAY)
-        self.screen.blit(level_text, (SCREEN_WIDTH - 250, 40))
+        self.screen.blit(level_text, (SCREEN_WIDTH - 180, 40))
 
         # 护盾状态
         if self.player.has_shield:
             shield_text = self.font_small.render("护盾 ON", True, (0, 200, 255))
-            self.screen.blit(shield_text, (SCREEN_WIDTH - 150, 70))
+            self.screen.blit(shield_text, (SCREEN_WIDTH - 100, 70))
 
         tip = self.font_small.render("方向键移动 空格/J射击 ESC暂停", True, COLOR_GRAY)
         self.screen.blit(tip, (SCREEN_WIDTH//2 - 130, SCREEN_HEIGHT - 30))
@@ -462,11 +462,11 @@ class Game:
                     return
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
-                if pygame.Rect(SCREEN_WIDTH//2 - 100, 320, 200, 50).collidepoint(mx, my):
+                if pygame.Rect(SCREEN_WIDTH//2 - 100, 400, 200, 50).collidepoint(mx, my):
                     self._init_game()
                     self.state = "playing"
                     return
-                if pygame.Rect(SCREEN_WIDTH//2 - 100, 390, 200, 50).collidepoint(mx, my):
+                if pygame.Rect(SCREEN_WIDTH//2 - 100, 470, 200, 50).collidepoint(mx, my):
                     self.state = "menu"
                     return
 
@@ -480,13 +480,13 @@ class Game:
         self.screen.blit(overlay, (0, 0))
 
         title = self.font_large.render("游戏结束", True, COLOR_RED)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 120)))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 180)))
 
         score_text = self.font_medium.render(f"最终得分: {self.score}", True, COLOR_GOLD)
-        self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH//2, 200)))
+        self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH//2, 280)))
 
         mx, my = pygame.mouse.get_pos()
-        for text, y in [("重新开始", 320), ("返回主菜单", 390)]:
+        for text, y in [("重新开始", 400), ("返回主菜单", 470)]:
             btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, y, 200, 50)
             hover = btn_rect.collidepoint(mx, my)
             color = COLOR_BLUE if hover else COLOR_GRAY
