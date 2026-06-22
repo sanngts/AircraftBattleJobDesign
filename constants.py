@@ -5,7 +5,7 @@
 # ---------- 窗口设置 ----------
 SCREEN_WIDTH = 480
 SCREEN_HEIGHT = 720
-FPS = 120
+FPS = 60
 GAME_TITLE = "飞机大战2026"
 
 # ---------- 资源路径 ----------
@@ -20,7 +20,7 @@ FONT_PATH = "temp_place_fonts/"
 # --- 游戏界面 UI ---
 IMG_BACKGROUND_1 = "background_1.png"
 IMG_BACKGROUND_2 = "background_2.png"
-IMG_BACKGROUND_3 = "background_3.png"
+IMG_BACKGROUND_3 = "background_3.jpg"
 IMG_PAUSE = "pause.png"
 IMG_RESUME = "resume.png"
 IMG_BACK = "back.png"
@@ -78,36 +78,120 @@ BTN_Y_RESTART = 350
 BTN_Y_BACK = 420
 
 # ---------- 玩家属性 ----------
-PLAYER_INIT_HP = 5          # 初始生命值
+PLAYER_INIT_HP = 8          # 初始生命值
 PLAYER_SPEED = 5            # 移动速度（像素/帧）
 PLAYER_INIT_SCORE = 0       # 初始分数
 PLAYER_INVINCIBLE_TIME = 60 # 受伤后无敌帧数（约1秒）
-PLAYER_AMMO_MAX = 50        # 最大弹药
+PLAYER_AMMO_MAX = 500        # 最大弹药
 
 # ---------- 敌机属性 ----------
-ENEMY_SPEED_MIN = 2         # 敌机最低速度
-ENEMY_SPEED_MAX = 6         # 敌机最高速度
-ENEMY_SPAWN_INTERVAL = 40   # 敌机生成间隔（帧）
-ENEMY_HP_BASE = 1           # 敌机基础血量
+ENEMY_SPEED_MIN = 3         # 敌机最低速度（px/帧）
+ENEMY_SPEED_MAX = 6         # 敌机最高速度（px/帧）
+ENEMY_SPAWN_INTERVAL = 30   # 敌机生成间隔（帧）
+ENEMY_HP_BASE = 1           # 敌机基础血量（将被 EnemyType 中具体值覆盖）
 ENEMY_SCORE_BASE = 10       # 击毁敌机基础得分
 BOSS_TRIGGER_KILLS = 30     # 消灭多少敌机后触发Boss
 
+# 各敌机类型基础血量（未乘难度倍率）
+ENEMY_HP = {
+    "enemy_1": 8,    # 低血量：2~3发子弹击落（简单模式）
+    "enemy_2": 14,    # 中等血量
+    "enemy_3": 25,    # 高血量
+    "boss": 50,      # Boss 高血量
+}
+
 # ---------- 子弹属性 ----------
-BULLET_SPEED = 8            # 玩家子弹速度
-ENEMY_BULLET_SPEED = 5      # 敌机子弹速度
-BULLET_COOLDOWN = 15        # 玩家射击冷却（帧）
-BULLET_DAMAGE = 1           # 子弹伤害
+BULLET_SPEED = 12           # 玩家子弹速度（px/帧 @60fps，向上）
+ENEMY_BULLET_SPEED = 9      # 敌机子弹速度（px/帧，向下）
+BULLET_COOLDOWN = 6         # 玩家射击冷却（帧）
+BULLET_DAMAGE = 2           # 子弹伤害
+
+# ---------- 追踪弹限制 ----------
+AIMED_TRACK_DURATION = 90   # 追踪持续时间（帧，约1.5秒@60fps）
+AIMED_TURN_RATE = 0.08      # 追踪弹初始转向速率
+AIMED_TURN_RATE_MIN = 0.01  # 追踪弹最小转向速率（结束时极弱追踪）
+
+# ---------- 动态难度 ----------
+DYNAMIC_DIFFICULTY_BASE = 0.7      # 动态难度起点倍率（开局快速进入战斗）
+DYNAMIC_DIFFICULTY_MAX = 1.6       # 动态难度上限倍率
+DYNAMIC_DIFFICULTY_RAMP_SCORE = 600  # 达到最大难度的分数阈值
+SHOOT_TIMER_MIN = 14                # 敌机射击间隔下限（帧），防止后期过于密集
+
+# ---------- 敌方子弹类型 ----------
+ENEMY_BULLET_NORMAL = "normal"          # 普通直线弹
+ENEMY_BULLET_AIMED = "aimed"            # 追踪弹（有限追踪）
+ENEMY_BULLET_SPREAD = "spread"          # 扇形散弹
+ENEMY_BULLET_LASER = "laser"            # 激光束（长条光束，替换波弹）
+ENEMY_BULLET_BURST = "burst"            # 爆发圆环弹
+
+ENEMY_BULLET_DAMAGE = {
+    ENEMY_BULLET_NORMAL: 1,
+    ENEMY_BULLET_AIMED: 1,
+    ENEMY_BULLET_SPREAD: 1,
+    ENEMY_BULLET_LASER: 2,
+    ENEMY_BULLET_BURST: 2,
+}
+
+ENEMY_BULLET_SPEEDS = {
+    ENEMY_BULLET_NORMAL: 9,
+    ENEMY_BULLET_AIMED: 7,
+    ENEMY_BULLET_SPREAD: 7,
+    ENEMY_BULLET_LASER: 22.0,   # 激光束高速飞行，远快于普通子弹
+    ENEMY_BULLET_BURST: 8,
+}
+
+# 散弹参数
+SPREAD_COUNT = 5            # 扇形子弹数量
+SPREAD_ANGLE = 30           # 扇形总角度（度）
+
+# 激光束参数
+LASER_WIDTH = 8             # 激光束宽度
+LASER_HEIGHT = 90           # 激光束高度（长条光束）
+LASER_COUNT = 2             # 一次发射的激光束数量
+
+# 爆发弹参数
+BURST_COUNT = 8             # 圆环子弹数量
+
+# Boss 弹幕参数
+BOSS_BARRAGE_INTERVAL = 60  # Boss 弹幕间隔（帧）
+
+# ---------- 敌机行为模式 ----------
+# 敌机状态机
+STATE_ENTER = "enter"          # 入场：从屏幕上方进入
+STATE_ORBIT = "orbit"          # 环绕飞行：绕玩家圆周运动
+STATE_CROSS = "cross"          # 交叉封锁：交叉飞行形成弹幕
+STATE_HOVER = "hover"          # 定点悬停射击
+STATE_CHARGE = "charge"        # 冲刺：朝玩家冲刺
+STATE_RETREAT = "retreat"      # 撤退：离开屏幕重新入场
+STATE_LEAD_SHOT = "lead_shot"  # 预判射击：预判玩家走位
+
+# 各模式参数
+ORBIT_RADIUS_MIN = 80          # 环绕最小半径
+ORBIT_RADIUS_MAX = 150         # 环绕最大半径
+ORBIT_SPEED = 0.03             # 环绕角速度
+HOVER_DURATION_MIN = 60        # 悬停最短时间（帧）
+HOVER_DURATION_MAX = 180       # 悬停最长时间（帧）
+CROSS_SPEED = 4                # 交叉飞行速度
+CHARGE_SPEED = 5               # 冲刺速度
+RETREAT_SPEED = 3              # 撤退速度
+
+# ---------- 屏幕敌机上限 ----------
+MAX_ENEMIES_ON_SCREEN = 10      # 屏幕上同时存在的最大敌机数量
 
 # ---------- 道具属性 ----------
-POWERUP_DROP_CHANCE = 0.15  # 敌机死亡掉落道具概率
-POWERUP_FALL_SPEED = 2      # 道具下落速度
-SHIELD_DURATION = 300       # 护盾持续时间（帧）
+POWERUP_DROP_CHANCE = 0.2   # 敌机死亡掉落道具概率
+POWERUP_FALL_SPEED = 5      # 道具下落速度（px/帧 @120fps）
+SHIELD_DURATION = 600       # 护盾持续时间（帧 @60fps = 10秒）
+SHIELD_BLINK_START = 180    # 护盾最后3秒开始闪烁提示
+ENEMY_EXPLOSION_DURATION = 12  # 敌机爆炸动画持续时间（帧 @60fps = 0.2秒）
+SHIELD_HIT_COOLDOWN = 30    # 护盾撞击敌机伤害冷却（帧 @60fps = 0.5秒）
+SUPPLY_SPAWN_INTERVAL = 420  # 补给道具自动投放间隔（帧 @60fps ≈ 7秒）
 
 # ---------- 难度倍率 ----------
 DIFFICULTY_MULTIPLIER = {
-    "简单": {"hp": 1.5, "spawn_rate": 0.7, "enemy_hp": 0.7, "score": 0.8},
-    "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "score": 1.0},
-    "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "score": 1.5},
+    "简单": {"hp": 2.0, "spawn_rate": 0.5, "enemy_hp": 0.6, "enemy_speed": 0.6, "score": 0.8},
+    "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "enemy_speed": 1.0, "score": 1.0},
+    "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5},
 }
 
 # ---------- 界面遮罩 ----------

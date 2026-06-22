@@ -3,7 +3,9 @@ import random
 import sys
 import os
 from constants import *
-from src.sprites import Player, Enemy, EnemyType, PowerUp, spawn_random_powerup
+from src.sprites import (Player, Enemy, EnemyType, spawn_random_powerup,
+                           _try_load_image, BulletBox, Shield, WeaponUpgrade, LifeRecovery)
+from game_music import MusicPlayer
 
 class Game:
     """游戏主类，管理游戏循环和状态"""
@@ -11,9 +13,13 @@ class Game:
     def __init__(self, screen):
         self.screen = screen
         self.clock = pygame.time.Clock()
-        self.state = "menu"  # menu / difficulty / playing / paused / gameover
+        self.state = "menu"  # menu / difficulty / playing / paused
         self.difficulty = "普通"
         self.running = True
+        self.is_gameover = False  # 标记 paused 是否为游戏结束
+
+        # 音乐播放器
+        self.music_player = MusicPlayer()
 
         # 精灵组
         self.player_group = None
@@ -25,7 +31,7 @@ class Game:
 
         # 游戏数据
         self.score = 0
-        self.enemy_spawn_timer = 0
+        self.enemy_spawn_timer = ENEMY_SPAWN_INTERVAL // 2  # 首波敌机更快出现
         self.boss_spawned = False
         self.boss_kill_count = 0
         self.kill_count = 0
@@ -35,14 +41,40 @@ class Game:
         self.backgrounds = {}
         self._load_backgrounds()
 
-        # 字体
-        self.font_large = pygame.font.Font(None, 64)
-        self.font_medium = pygame.font.Font(None, 40)
-        self.font_small = pygame.font.Font(None, 28)
+        # 字体 — 尝试加载中文字体
+        self._init_fonts()
+
+        # 背景滚动偏移
+        self.bg_scroll_y = 0
+        self.bg_scroll_speed = 3
 
         # 背景星星（无背景图时使用）
         self.stars = [(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT),
                        random.randint(1, 3)) for _ in range(80)]
+
+    def _init_fonts(self):
+        """初始化字体，优先使用系统自带中文字体"""
+        chinese_fonts = [
+            "simhei", "simsun", "microsoftyahei", "msyh", "fangsong",
+            "kaiti", "notosanscjk", "wenquanyi", "droid sans fallback",
+        ]
+        chosen = None
+        for name in chinese_fonts:
+            try:
+                pygame.font.SysFont(name, 20)
+                chosen = name
+                break
+            except Exception:
+                continue
+
+        if chosen:
+            self.font_large = pygame.font.SysFont(chosen, 48)
+            self.font_medium = pygame.font.SysFont(chosen, 32)
+            self.font_small = pygame.font.SysFont(chosen, 22)
+        else:
+            self.font_large = pygame.font.Font(None, 48)
+            self.font_medium = pygame.font.Font(None, 32)
+            self.font_small = pygame.font.Font(None, 22)
 
     def _load_backgrounds(self):
         """加载三张关卡背景图"""
@@ -68,8 +100,6 @@ class Game:
                 self._run_gameplay()
             elif self.state == "paused":
                 self._run_paused()
-            elif self.state == "gameover":
-                self._run_gameover()
 
     # ==================== 菜单界面 ====================
 
@@ -94,6 +124,7 @@ class Game:
                 mx, my = event.pos
                 btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 350, 200, 50)
                 if btn_rect.collidepoint(mx, my):
+                    self.music_player.play_button()
                     self.state = "difficulty"
                     return
 
@@ -104,8 +135,18 @@ class Game:
         title = self.font_large.render("飞机大战 2026", True, COLOR_GOLD)
         self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 160)))
 
-        subtitle = self.font_small.render("Aircraft Battle", True, COLOR_WHITE)
+        subtitle = self.font_small.render("经典射击游戏", True, COLOR_WHITE)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH//2, 220)))
+
+        # 操作说明
+        hints = [
+            "方向键 / WASD — 移动飞机",
+            "空格 / J — 射击",
+            "ESC — 暂停游戏",
+        ]
+        for i, hint in enumerate(hints):
+            hint_text = self.font_small.render(hint, True, COLOR_GRAY)
+            self.screen.blit(hint_text, hint_text.get_rect(center=(SCREEN_WIDTH//2, 500 + i * 30)))
 
         btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 350, 200, 50)
         mx, my = pygame.mouse.get_pos()
@@ -145,6 +186,7 @@ class Game:
                 for i, diff in enumerate(difficulties):
                     btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
                     if btn_rect.collidepoint(mx, my):
+                        self.music_player.play_button()
                         self.difficulty = diff
                         self._init_game()
                         self.state = "playing"
@@ -159,10 +201,9 @@ class Game:
 
         difficulties = ["简单", "普通", "困难"]
         colors = [COLOR_GREEN, COLOR_BLUE, COLOR_RED]
-        descs = ["敌人较弱，适合新手", "标准挑战", "敌人更强，高分奖励"]
         mx, my = pygame.mouse.get_pos()
 
-        for i, (diff, color, desc) in enumerate(zip(difficulties, colors, descs)):
+        for i, (diff, color) in enumerate(zip(difficulties, colors)):
             btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
             hover = btn_rect.collidepoint(mx, my)
             btn_color = color if not hover else tuple(min(c + 40, 255) for c in color)
@@ -170,8 +211,6 @@ class Game:
             pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=10)
             btn_text = self.font_medium.render(diff, True, COLOR_WHITE)
             self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
-            desc_text = self.font_small.render(desc, True, color)
-            self.screen.blit(desc_text, desc_text.get_rect(center=(SCREEN_WIDTH//2, 280 + i * 90)))
 
         tip = self.font_small.render("按 ESC 返回主菜单", True, COLOR_GRAY)
         self.screen.blit(tip, tip.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 40)))
@@ -190,11 +229,22 @@ class Game:
         self.all_sprites = pygame.sprite.Group(self.player)
 
         self.score = 0
-        self.enemy_spawn_timer = 0
+        self.enemy_spawn_timer = ENEMY_SPAWN_INTERVAL // 2  # 首波敌机更快出现
         self.boss_spawned = False
         self.boss_kill_count = 0
         self.kill_count = 0
         self.current_level = 1
+        self.is_gameover = False
+
+        # 动态难度
+        self.survival_frames = 0
+        self.dynamic_difficulty = DYNAMIC_DIFFICULTY_BASE
+
+        # 补给自动投放计时
+        self.supply_spawn_timer = 0
+
+        # 开始背景音乐
+        self.music_player.play_music()
 
     # ==================== 游戏进行中 ====================
 
@@ -224,6 +274,7 @@ class Game:
                     for bullet in self.player.shoot():
                         self.bullet_group.add(bullet)
                         self.all_sprites.add(bullet)
+                    self.music_player.play_bullet()
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_j] or keys[pygame.K_SPACE]:
@@ -234,23 +285,36 @@ class Game:
         return None
 
     def _update_gameplay(self):
+        self.survival_frames += 1
+        self._update_dynamic_difficulty()
+
         self.player_group.update()
         self.enemy_group.update()
         self.bullet_group.update()
         self.enemy_bullet_group.update()
         self.powerup_group.update()
 
-        # 敌机射击
+        # 敌机射击 — 传入玩家引用，支持追踪弹等智能弹道
         for enemy in self.enemy_group:
-            bullet = enemy.shoot()
-            if bullet:
+            if enemy.exploding:
+                continue
+            bullets = enemy.shoot(self.player)
+            for bullet in bullets:
                 self.enemy_bullet_group.add(bullet)
 
         # 生成敌机
         self._spawn_enemies()
 
+        # 自动投放补给道具
+        self._spawn_supplies()
+
         # 关卡切换（每消灭一定数量敌机切换背景）
         self._update_level()
+
+    def _update_dynamic_difficulty(self):
+        """根据当前分数计算动态难度倍率，分数越高难度越大"""
+        score_ratio = min(1.0, self.score / DYNAMIC_DIFFICULTY_RAMP_SCORE)
+        self.dynamic_difficulty = DYNAMIC_DIFFICULTY_BASE + (DYNAMIC_DIFFICULTY_MAX - DYNAMIC_DIFFICULTY_BASE) * score_ratio
 
     def _update_level(self):
         """根据分数切换关卡背景"""
@@ -259,136 +323,328 @@ class Game:
         elif self.score >= 200 and self.current_level < 2:
             self.current_level = 2
 
+    def _spawn_supplies(self):
+        """自动投放弹药、护盾、武器升级、生命恢复等补给道具"""
+        self.supply_spawn_timer += 1
+        if self.supply_spawn_timer >= SUPPLY_SPAWN_INTERVAL:
+            self.supply_spawn_timer = 0
+            x = random.randint(30, SCREEN_WIDTH - 30)
+            y = -20
+            r = random.random()
+            if r < 0.35:
+                p = BulletBox(x, y)
+            elif r < 0.55:
+                p = LifeRecovery(x, y)
+            elif r < 0.80:
+                p = Shield(x, y)
+            else:
+                p = WeaponUpgrade(x, y)
+            self.powerup_group.add(p)
+            self.all_sprites.add(p)
+
     def _spawn_enemies(self):
+        # 屏幕敌机数量已达上限，不再生成
+        if len(self.enemy_group) >= MAX_ENEMIES_ON_SCREEN:
+            return
+
         mult = DIFFICULTY_MULTIPLIER[self.difficulty]
-        spawn_interval = int(ENEMY_SPAWN_INTERVAL / mult["spawn_rate"])
+        # 动态难度影响生成间隔：难度越高，间隔越短（敌机越多）
+        base_interval = ENEMY_SPAWN_INTERVAL / (mult["spawn_rate"] * self.dynamic_difficulty)
+        spawn_interval = max(8, int(base_interval))  # 下限防止过于密集
         self.enemy_spawn_timer += 1
 
         if self.enemy_spawn_timer >= spawn_interval:
             self.enemy_spawn_timer = 0
 
             if self.kill_count >= BOSS_TRIGGER_KILLS and not self.boss_spawned:
-                boss = Enemy(EnemyType.BOSS, mult["enemy_hp"])
+                boss = Enemy(EnemyType.BOSS, mult["enemy_hp"], mult["enemy_speed"],
+                             player=self.player, game_state=self)
                 self.enemy_group.add(boss)
                 self.all_sprites.add(boss)
                 self.boss_spawned = True
                 self.kill_count = 0
             else:
-                r = random.random()
-                if r < 0.5:
-                    enemy_type = EnemyType.ENEMY_1
-                elif r < 0.85:
-                    enemy_type = EnemyType.ENEMY_2
-                else:
-                    enemy_type = EnemyType.ENEMY_3
+                # 根据游戏阶段调整敌机生成策略
+                stage = self._get_game_stage()
+                self._spawn_by_stage(stage, mult)
 
-                enemy = Enemy(enemy_type, mult["enemy_hp"])
-                self.enemy_group.add(enemy)
-                self.all_sprites.add(enemy)
+    def _get_game_stage(self):
+        """获取当前游戏阶段，影响敌机生成策略"""
+        if self.score < 100:
+            return "early"
+        elif self.score < 350:
+            return "mid"
+        else:
+            return "late"
+
+    def _spawn_by_stage(self, stage, mult):
+        """根据游戏阶段和动态难度生成不同策略的敌机编队"""
+        r = random.random()
+        dyn = self.dynamic_difficulty  # 动态难度倍率 (0.35 ~ 1.6)
+
+        if stage == "early":
+            # 早期：以 enemy_1 为主，enemy_2/enemy_3 较少出现
+            if r < 0.85:
+                enemy_type = EnemyType.ENEMY_1
+            elif r < 0.97:
+                enemy_type = EnemyType.ENEMY_2
+            else:
+                enemy_type = EnemyType.ENEMY_3
+            enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
+                          player=self.player, game_state=self)
+
+        elif stage == "mid":
+            # 中期：增加交叉封锁编队
+            if r < 0.30:
+                enemy_type = EnemyType.ENEMY_1
+            elif r < 0.75:
+                enemy_type = EnemyType.ENEMY_2
+            else:
+                enemy_type = EnemyType.ENEMY_3
+            enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
+                          player=self.player, game_state=self)
+
+            # 偶尔生成交叉编队（同时生成两架 enemy_2），动态难度高时概率更大
+            cross_chance = 0.1 + dyn * 0.18  # 0.16 ~ 0.39
+            if random.random() < cross_chance:
+                enemy2 = Enemy(EnemyType.ENEMY_2, mult["enemy_hp"], mult["enemy_speed"],
+                               player=self.player, game_state=self)
+                # 让两架敌机初始处于交叉封锁状态
+                enemy2._enter_state(STATE_CROSS)
+                enemy2.ai_data["cross_target_x"] = SCREEN_WIDTH - enemy.rect.centerx
+                enemy2.ai_data["cross_target_y"] = enemy.rect.centery + random.randint(-40, 40)
+                enemy2.ai_data["cross_duration"] = 180
+                self.enemy_group.add(enemy2)
+                self.all_sprites.add(enemy2)
+
+        else:  # late
+            # 后期：高血量敌机 + 复杂行为，动态难度控制高级行为概率
+            if r < 0.15:
+                enemy_type = EnemyType.ENEMY_1
+            elif r < 0.55:
+                enemy_type = EnemyType.ENEMY_2
+            else:
+                enemy_type = EnemyType.ENEMY_3
+            enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
+                          player=self.player, game_state=self)
+
+            # 后期预判射击型敌机概率随动态难度增长
+            lead_chance = 0.1 + dyn * 0.2  # 0.17 ~ 0.42
+            if random.random() < lead_chance:
+                enemy._enter_state(STATE_LEAD_SHOT)
+
+            # 后期悬停射击编队概率随动态难度增长
+            hover_chance = 0.08 + dyn * 0.18  # 0.14 ~ 0.37
+            if random.random() < hover_chance:
+                hover_enemy = Enemy(EnemyType.ENEMY_2, mult["enemy_hp"], mult["enemy_speed"],
+                                    player=self.player, game_state=self)
+                hover_enemy._enter_state(STATE_HOVER)
+                hover_enemy.rect.x = random.randint(40, SCREEN_WIDTH - 40)
+                hover_enemy.rect.y = random.randint(60, SCREEN_HEIGHT // 3)
+                self.enemy_group.add(hover_enemy)
+                self.all_sprites.add(hover_enemy)
+
+        self.enemy_group.add(enemy)
+        self.all_sprites.add(enemy)
 
     def _check_collisions(self):
-        # 玩家子弹 vs 敌机
-        hits = pygame.sprite.groupcollide(self.bullet_group, self.enemy_group, True, False)
-        for bullet, enemies in hits.items():
-            for enemy in enemies:
-                if enemy.take_damage(BULLET_DAMAGE):
-                    self.score += enemy.score_value
-                    self.kill_count += 1
-                    if enemy.is_boss:
-                        self.boss_spawned = False
-                        self.boss_kill_count += 1
-                    # 掉落道具
-                    powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery)
-                    if powerup:
-                        self.powerup_group.add(powerup)
-                        self.all_sprites.add(powerup)
-                    enemy.kill()
-                    self.all_sprites.remove(enemy)
+        # 玩家子弹 vs 敌机 — 使用像素级碰撞
+        for bullet in self.bullet_group:
+            if not bullet.alive():
+                continue
+            for enemy in self.enemy_group:
+                if not enemy.alive() or enemy.exploding:
+                    continue
+                if bullet.has_hit(enemy):
+                    bullet.kill()
+                    if enemy.take_damage(bullet.damage):
+                        self.score += enemy.score_value
+                        self.kill_count += 1
+                        if enemy.is_boss:
+                            self.boss_spawned = False
+                            self.boss_kill_count += 1
+                            self.music_player.play_enemy_down("enemy3")
+                        else:
+                            self.music_player.play_enemy_down(enemy.type_name)
+                        # 掉落道具
+                        powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery)
+                        if powerup:
+                            self.powerup_group.add(powerup)
+                            self.all_sprites.add(powerup)
+                        enemy.trigger_explosion()
+                    break  # 一颗子弹只命中一个敌机
 
-        # 敌机子弹 vs 玩家
-        if pygame.sprite.spritecollide(self.player, self.enemy_bullet_group, True):
-            if self.player.take_damage():
-                self.state = "gameover"
+        # 敌机子弹 vs 玩家 — 像素级碰撞 + 伤害值
+        for bullet in self.enemy_bullet_group:
+            if not bullet.alive():
+                continue
+            if bullet.has_hit(self.player):
+                bullet.kill()
+                if self.player.take_damage(bullet.damage):
+                    self.music_player.play_player_down()
+                    self.is_gameover = True
+                    self.state = "paused"
 
-        # 敌机 vs 玩家
-        hits = pygame.sprite.spritecollide(self.player, self.enemy_group, False)
-        for enemy in hits:
-            if self.player.take_damage():
-                self.state = "gameover"
+        # 敌机 vs 玩家（碰撞伤害 = 敌机类型的基础伤害）
+        # 护盾期间：玩家不受伤，非Boss敌机每0.5秒受到1点伤害
+        for enemy in self.enemy_group:
+            if not enemy.alive() or enemy.exploding:
+                continue
+            if self.player.rect.colliderect(enemy.rect):
+                if self.player.has_shield:
+                    # 护盾撞击：对非Boss敌机造成持续伤害
+                    if not enemy.is_boss:
+                        enemy.shield_hit_timer -= 1
+                        if enemy.shield_hit_timer <= 0:
+                            enemy.shield_hit_timer = SHIELD_HIT_COOLDOWN
+                            if enemy.take_damage(1):
+                                self.score += enemy.score_value
+                                self.kill_count += 1
+                                self.music_player.play_enemy_down(enemy.type_name)
+                                powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery)
+                                if powerup:
+                                    self.powerup_group.add(powerup)
+                                    self.all_sprites.add(powerup)
+                                enemy.trigger_explosion()
+                else:
+                    # 敌机撞击伤害 = 1，Boss 撞击伤害 = 2
+                    collision_damage = 2 if enemy.is_boss else 1
+                    if self.player.take_damage(collision_damage):
+                        self.music_player.play_player_down()
+                        self.is_gameover = True
+                        self.state = "paused"
 
         # 玩家 vs 道具
         powerup_hits = pygame.sprite.spritecollide(self.player, self.powerup_group, True)
         for powerup in powerup_hits:
             powerup.apply(self.player)
+            # 根据道具类型播放对应音效
+            if powerup.powerup_type == "bullet_box":
+                self.music_player.play_get_bullet()
+            elif powerup.powerup_type == "life_recovery":
+                self.music_player.play_supply()
+            elif powerup.powerup_type == "shield":
+                self.music_player.play_get_bomb()
+            elif powerup.powerup_type == "weapon_upgrade":
+                self.music_player.play_upgrade()
 
     def _draw_gameplay(self):
-        # 背景
+        # 背景 — 第三关静态显示，其他关卡循环滚动
         bg = self.backgrounds.get(self.current_level)
-        if bg:
-            self.screen.blit(bg, (0, 0))
+        if self.current_level == 3:
+            if bg:
+                self.screen.blit(bg, (0, 0))
+            else:
+                self.screen.fill(COLOR_BLACK)
+                self._draw_stars()
         else:
-            self.screen.fill(COLOR_BLACK)
-            self._draw_stars()
-
-        # 道具
-        for powerup in self.powerup_group:
-            self.screen.blit(powerup.image, powerup.rect)
+            self.bg_scroll_y = (self.bg_scroll_y + self.bg_scroll_speed) % SCREEN_HEIGHT
+            if bg:
+                # 上下两张背景拼接实现无缝滚动
+                self.screen.blit(bg, (0, self.bg_scroll_y - SCREEN_HEIGHT))
+                self.screen.blit(bg, (0, self.bg_scroll_y))
+            else:
+                self.screen.fill(COLOR_BLACK)
+                self._draw_stars()
 
         # 精灵
         self.player.draw(self.screen)
         for enemy in self.enemy_group:
             self.screen.blit(enemy.image, enemy.rect)
-            enemy.draw_hp_bar(self.screen)
+            if not enemy.exploding:
+                enemy.draw_hp_bar(self.screen)
         for bullet in self.bullet_group:
             self.screen.blit(bullet.image, bullet.rect)
         for bullet in self.enemy_bullet_group:
             self.screen.blit(bullet.image, bullet.rect)
 
+        # 道具 — 画在所有精灵之上，确保始终可见
+        for powerup in self.powerup_group:
+            self.screen.blit(powerup.image, powerup.rect)
+
         self._draw_hud()
         pygame.display.flip()
 
     def _draw_hud(self):
-        # 分数
-        score_text = self.font_medium.render(f"分数: {self.score}", True, COLOR_WHITE)
-        self.screen.blit(score_text, (20, 10))
+        """左上角 HUD：弹药图标+数值 | 血量图标+数值 | 武器等级"""
+        margin_x = 16
+        margin_y = 12
+        row_gap = 40
+        icon_size = 24
 
-        # 生命值（用 life.png 图标 + 文字）
-        hp_text = self.font_medium.render(f"HP: {self.player.hp}/{self.player.max_hp}", True, COLOR_GREEN)
-        self.screen.blit(hp_text, (20, 50))
+        # --- 弹药显示：子弹图标 + 绝对数值 ---
+        ammo_icon = _try_load_image(IMG_BULLET, default_size=(icon_size, icon_size))
+        # 如果加载到的是占位灰色，则手动绘制一个黄色子弹图标
+        if ammo_icon.get_width() == icon_size and ammo_icon.get_height() == icon_size:
+            try:
+                if ammo_icon.get_at((0, 0))[:3] == (100, 100, 100):
+                    ammo_icon = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
+                    pygame.draw.rect(ammo_icon, COLOR_YELLOW, (6, 0, 12, 20), border_radius=2)
+                    pygame.draw.rect(ammo_icon, (180, 130, 0), (4, 18, 16, 6), border_radius=2)
+            except Exception:
+                pass
+        self.screen.blit(ammo_icon, (margin_x, margin_y))
+        ammo_text = self.font_medium.render(str(self.player.ammo), True, COLOR_WHITE)
+        self.screen.blit(ammo_text, (margin_x + icon_size + 8, margin_y - 2))
 
-        # 弹药值
-        ammo_color = COLOR_YELLOW if self.player.ammo > 10 else COLOR_RED
-        ammo_text = self.font_medium.render(f"弹药: {self.player.ammo}/{self.player.max_ammo}", True, ammo_color)
-        self.screen.blit(ammo_text, (20, 90))
+        # --- 血量显示：玩家飞机图标 + 数值 ---
+        hp_icon = _try_load_image(IMG_PLAYER_PLANE, default_size=(icon_size, icon_size))
+        self.screen.blit(hp_icon, (margin_x, margin_y + row_gap))
+        hp_text = self.font_medium.render(str(self.player.hp), True, COLOR_GREEN)
+        self.screen.blit(hp_text, (margin_x + icon_size + 8, margin_y + row_gap - 2))
 
-        # 武器等级
-        weapon_text = self.font_small.render(f"武器 Lv.{self.player.weapon_level}", True, COLOR_GOLD)
-        self.screen.blit(weapon_text, (20, 130))
+        # --- 武器等级 ---
+        lv_text = self.font_small.render(f"Lv.{self.player.weapon_level}", True, COLOR_GOLD)
+        self.screen.blit(lv_text, (margin_x, margin_y + row_gap * 2))
 
-        # Boss击杀数
+        # --- 右上角：分数 ---
+        score_text = self.font_medium.render(f"{self.score}", True, COLOR_GOLD)
+        self.screen.blit(score_text, (SCREEN_WIDTH - score_text.get_width() - 16, 12))
+
+        # --- 右上角：Boss 击杀数 ---
         if self.boss_kill_count > 0:
-            boss_text = self.font_small.render(f"击败Boss: {self.boss_kill_count}", True, COLOR_GOLD)
-            self.screen.blit(boss_text, (SCREEN_WIDTH - 120, 10))
+            boss_text = self.font_small.render(f"Boss x{self.boss_kill_count}", True, COLOR_GOLD)
+            self.screen.blit(boss_text, (SCREEN_WIDTH - boss_text.get_width() - 16, 48))
 
-        # 关卡/难度
-        level_text = self.font_small.render(f"关卡: {self.current_level}  难度: {self.difficulty}", True, COLOR_GRAY)
-        self.screen.blit(level_text, (SCREEN_WIDTH - 180, 40))
-
-        # 护盾状态
+        # --- 护盾状态 ---
         if self.player.has_shield:
-            shield_text = self.font_small.render("护盾 ON", True, (0, 200, 255))
-            self.screen.blit(shield_text, (SCREEN_WIDTH - 100, 70))
+            shield_remain = self.player.shield_timer / SHIELD_DURATION
+            shield_seconds = max(0, self.player.shield_timer // FPS)
+            # 最后3秒闪烁警告
+            blink = self.player.shield_timer <= SHIELD_BLINK_START and (self.player.shield_timer // 15) % 2 == 0
+            if blink:
+                shield_color = (255, 80, 80)
+            else:
+                shield_color = (0, 200, 255)
+            shield_text = self.font_small.render(f"护盾 {shield_seconds}s", True, shield_color)
+            self.screen.blit(shield_text, (margin_x, margin_y + row_gap * 2 + 28))
 
-        tip = self.font_small.render("方向键移动 空格/J射击 ESC暂停", True, COLOR_GRAY)
-        self.screen.blit(tip, (SCREEN_WIDTH//2 - 130, SCREEN_HEIGHT - 30))
+            # 护盾进度条
+            bar_w = 100
+            bar_h = 6
+            bar_x = margin_x
+            bar_y = margin_y + row_gap * 2 + 52
+            pygame.draw.rect(self.screen, COLOR_GRAY, (bar_x, bar_y, bar_w, bar_h))
+            pygame.draw.rect(self.screen, COLOR_WHITE, (bar_x, bar_y, bar_w, bar_h), 1)
+            fill_color = (255, 80, 80) if blink else (0, 200, 255)
+            pygame.draw.rect(self.screen, fill_color, (bar_x, bar_y, int(bar_w * shield_remain), bar_h))
 
-    # ==================== 暂停界面 ====================
+        # --- 底部提示 ---
+        tip = self.font_small.render("移动:方向键  射击:空格/J  暂停:ESC", True, COLOR_GRAY)
+        self.screen.blit(tip, (SCREEN_WIDTH//2 - tip.get_width()//2, SCREEN_HEIGHT - 28))
+
+    # ==================== 暂停/游戏结束界面 ====================
 
     def _run_paused(self):
+        # 暂停背景音乐
+        self.music_player.pause_music()
         while self.state == "paused" and self.running:
             self.clock.tick(FPS)
             self._handle_pause_events()
             self._draw_paused()
+        # 恢复背景音乐
+        if self.state == "playing":
+            self.music_player.unpause_music()
 
     def _handle_pause_events(self):
         for event in pygame.event.get():
@@ -397,21 +653,48 @@ class Game:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE or event.key == pygame.K_SPACE:
-                    self.state = "playing"
-                    return
+                if not self.is_gameover:
+                    if event.key == pygame.K_ESCAPE or event.key == pygame.K_SPACE:
+                        self.state = "playing"
+                        return
+                else:
+                    if event.key == pygame.K_ESCAPE:
+                        self.is_gameover = False
+                        self.music_player.stop_music()
+                        self.state = "menu"
+                        return
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
-                if self._pause_btn_rect(BTN_Y_RESUME).collidepoint(mx, my):
-                    self.state = "playing"
-                    return
-                if self._pause_btn_rect(BTN_Y_RESTART).collidepoint(mx, my):
-                    self._init_game()
-                    self.state = "playing"
-                    return
-                if self._pause_btn_rect(BTN_Y_BACK).collidepoint(mx, my):
-                    self.state = "menu"
-                    return
+                if not self.is_gameover:
+                    # 普通暂停：继续 / 重新开始 / 返回主菜单
+                    if self._pause_btn_rect(BTN_Y_RESUME).collidepoint(mx, my):
+                        self.music_player.play_button()
+                        self.state = "playing"
+                        return
+                    if self._pause_btn_rect(BTN_Y_RESTART).collidepoint(mx, my):
+                        self.music_player.play_button()
+                        self._init_game()
+                        self.state = "playing"
+                        return
+                    if self._pause_btn_rect(BTN_Y_BACK).collidepoint(mx, my):
+                        self.music_player.play_button()
+                        self.is_gameover = False
+                        self.music_player.stop_music()
+                        self.state = "menu"
+                        return
+                else:
+                    # 游戏结束：重新开始 / 返回主菜单
+                    if self._pause_btn_rect(BTN_Y_RESTART).collidepoint(mx, my):
+                        self.music_player.play_button()
+                        self._init_game()
+                        self.state = "playing"
+                        return
+                    if self._pause_btn_rect(BTN_Y_BACK).collidepoint(mx, my):
+                        self.music_player.play_button()
+                        self.is_gameover = False
+                        self.music_player.stop_music()
+                        self.state = "menu"
+                        return
 
     def _pause_btn_rect(self, y):
         return pygame.Rect(SCREEN_WIDTH//2 - BTN_WIDTH//2, y, BTN_WIDTH, BTN_HEIGHT)
@@ -422,81 +705,54 @@ class Game:
         overlay.fill(PAUSE_OVERLAY_COLOR)
         self.screen.blit(overlay, (0, 0))
 
-        title = self.font_large.render("游戏暂停", True, COLOR_WHITE)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 150)))
+        if self.is_gameover:
+            # 游戏结束标题 + 分数
+            title = self.font_large.render("游戏结束", True, COLOR_RED)
+            self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 140)))
 
-        mx, my = pygame.mouse.get_pos()
-        buttons = [
-            ("继续", BTN_Y_RESUME),
-            ("重新开始", BTN_Y_RESTART),
-            ("返回主菜单", BTN_Y_BACK),
-        ]
-        for text, y in buttons:
-            btn_rect = self._pause_btn_rect(y)
-            hover = btn_rect.collidepoint(mx, my)
-            color = COLOR_BLUE if hover else COLOR_GRAY
-            pygame.draw.rect(self.screen, color, btn_rect, border_radius=8)
-            pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=8)
-            btn_text = self.font_small.render(text, True, COLOR_WHITE)
-            self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
+            score_text = self.font_medium.render(f"最终得分：{self.score}", True, COLOR_GOLD)
+            self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH//2, 220)))
 
-        pygame.display.flip()
+            # 难度和关卡信息
+            info_text = self.font_small.render(f"难度：{self.difficulty}    关卡：{self.current_level}", True, COLOR_WHITE)
+            self.screen.blit(info_text, info_text.get_rect(center=(SCREEN_WIDTH//2, 260)))
 
-    # ==================== 游戏结束界面 ====================
+            # 按钮：重新开始 / 返回主菜单
+            mx, my = pygame.mouse.get_pos()
+            buttons = [
+                ("重新开始", BTN_Y_RESTART),
+                ("返回主菜单", BTN_Y_BACK),
+            ]
+            for text, y in buttons:
+                btn_rect = self._pause_btn_rect(y)
+                hover = btn_rect.collidepoint(mx, my)
+                color = COLOR_BLUE if hover else COLOR_GRAY
+                pygame.draw.rect(self.screen, color, btn_rect, border_radius=8)
+                pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=8)
+                btn_text = self.font_medium.render(text, True, COLOR_WHITE)
+                self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
-    def _run_gameover(self):
-        while self.state == "gameover" and self.running:
-            self.clock.tick(FPS)
-            self._handle_gameover_events()
-            self._draw_gameover()
+            tip = self.font_small.render("按 ESC 返回主菜单", True, COLOR_GRAY)
+            self.screen.blit(tip, tip.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 40)))
+        else:
+            # 普通暂停
+            title = self.font_large.render("游戏暂停", True, COLOR_WHITE)
+            self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 150)))
 
-    def _handle_gameover_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.state = "menu"
-                    return
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                if pygame.Rect(SCREEN_WIDTH//2 - 100, 400, 200, 50).collidepoint(mx, my):
-                    self._init_game()
-                    self.state = "playing"
-                    return
-                if pygame.Rect(SCREEN_WIDTH//2 - 100, 470, 200, 50).collidepoint(mx, my):
-                    self.state = "menu"
-                    return
-
-    def _draw_gameover(self):
-        self.screen.fill(COLOR_BLACK)
-        self._draw_stars()
-
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        overlay.set_alpha(180)
-        overlay.fill((0, 0, 0))
-        self.screen.blit(overlay, (0, 0))
-
-        title = self.font_large.render("游戏结束", True, COLOR_RED)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 180)))
-
-        score_text = self.font_medium.render(f"最终得分: {self.score}", True, COLOR_GOLD)
-        self.screen.blit(score_text, score_text.get_rect(center=(SCREEN_WIDTH//2, 280)))
-
-        mx, my = pygame.mouse.get_pos()
-        for text, y in [("重新开始", 400), ("返回主菜单", 470)]:
-            btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, y, 200, 50)
-            hover = btn_rect.collidepoint(mx, my)
-            color = COLOR_BLUE if hover else COLOR_GRAY
-            pygame.draw.rect(self.screen, color, btn_rect, border_radius=10)
-            pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=10)
-            btn_text = self.font_small.render(text, True, COLOR_WHITE)
-            self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
-
-        tip = self.font_small.render("按 ESC 返回主菜单", True, COLOR_GRAY)
-        self.screen.blit(tip, tip.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 40)))
+            mx, my = pygame.mouse.get_pos()
+            buttons = [
+                ("继续", BTN_Y_RESUME),
+                ("重新开始", BTN_Y_RESTART),
+                ("返回主菜单", BTN_Y_BACK),
+            ]
+            for text, y in buttons:
+                btn_rect = self._pause_btn_rect(y)
+                hover = btn_rect.collidepoint(mx, my)
+                color = COLOR_BLUE if hover else COLOR_GRAY
+                pygame.draw.rect(self.screen, color, btn_rect, border_radius=8)
+                pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=8)
+                btn_text = self.font_medium.render(text, True, COLOR_WHITE)
+                self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
         pygame.display.flip()
 
