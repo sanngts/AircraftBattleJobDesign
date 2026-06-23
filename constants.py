@@ -6,7 +6,7 @@
 SCREEN_WIDTH = 480
 SCREEN_HEIGHT = 720
 FPS = 60
-GAME_TITLE = "飞机大战2026"
+GAME_TITLE = "飞机大战"
 
 # ---------- 资源路径 ----------
 IMAGE_PATH = "assets/images/"
@@ -27,6 +27,7 @@ IMG_BACK = "back.png"
 IMG_RESTART = "restart.png"
 IMG_LIFE = "life.png"
 IMG_BULLET = "bullet.png"
+IMG_AMMO = "ammo.png"
 
 # --- 道具 ---
 IMG_BULLET_BOX = "bullet_box.png"
@@ -79,10 +80,17 @@ BTN_Y_BACK = 420
 
 # ---------- 玩家属性 ----------
 PLAYER_INIT_HP = 8          # 初始生命值
-PLAYER_SPEED = 5            # 移动速度（像素/帧）
+PLAYER_SPEED = 7            # 移动速度（像素/帧）
 PLAYER_INIT_SCORE = 0       # 初始分数
 PLAYER_INVINCIBLE_TIME = 60 # 受伤后无敌帧数（约1秒）
-PLAYER_AMMO_MAX = 500        # 最大弹药
+PLAYER_AMMO_MAX = 300        # 最大弹药
+
+# 弹药补给量（按难度）
+AMMO_PER_PICKUP = {
+    "简单": 200,
+    "普通": 100,
+    "困难": 50,
+}
 
 # ---------- 敌机属性 ----------
 ENEMY_SPEED_MIN = 3         # 敌机最低速度（px/帧）
@@ -189,7 +197,7 @@ SUPPLY_SPAWN_INTERVAL = 420  # 补给道具自动投放间隔（帧 @60fps ≈ 7
 
 # ---------- 难度倍率 ----------
 DIFFICULTY_MULTIPLIER = {
-    "简单": {"hp": 2.0, "spawn_rate": 0.5, "enemy_hp": 0.6, "enemy_speed": 0.6, "score": 0.8},
+    "简单": {"hp": 1.0, "spawn_rate": 0.5, "enemy_hp": 0.6, "enemy_speed": 0.6, "score": 0.8},
     "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "enemy_speed": 1.0, "score": 1.0},
     "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5},
 }

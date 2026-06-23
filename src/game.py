@@ -37,6 +37,10 @@ class Game:
         self.kill_count = 0
         self.current_level = 1
 
+        # 关卡切换公告
+        self.stage_announce_timer = 0
+        self.stage_announce_text = ""
+
         # 背景图片
         self.backgrounds = {}
         self._load_backgrounds()
@@ -98,6 +102,8 @@ class Game:
                 self._run_difficulty_select()
             elif self.state == "playing":
                 self._run_gameplay()
+            elif self.state == "ready_intro":
+                self._run_ready_intro()
             elif self.state == "paused":
                 self._run_paused()
 
@@ -129,14 +135,15 @@ class Game:
                     return
 
     def _draw_menu(self):
-        self.screen.fill(COLOR_BLACK)
-        self._draw_stars()
+        bg = self.backgrounds.get(1)
+        if bg:
+            self.screen.blit(bg, (0, 0))
+        else:
+            self.screen.fill(COLOR_BLACK)
+            self._draw_stars()
 
         title = self.font_large.render("飞机大战 2026", True, COLOR_GOLD)
         self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 160)))
-
-        subtitle = self.font_small.render("经典射击游戏", True, COLOR_WHITE)
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH//2, 220)))
 
         # 操作说明
         hints = [
@@ -189,12 +196,18 @@ class Game:
                         self.music_player.play_button()
                         self.difficulty = diff
                         self._init_game()
-                        self.state = "playing"
+                        # 玩家飞机从屏幕底部飞入
+                        self.player.rect.bottom = SCREEN_HEIGHT + 60
+                        self.state = "ready_intro"
                         return
 
     def _draw_difficulty_select(self):
-        self.screen.fill(COLOR_BLACK)
-        self._draw_stars()
+        bg = self.backgrounds.get(1)
+        if bg:
+            self.screen.blit(bg, (0, 0))
+        else:
+            self.screen.fill(COLOR_BLACK)
+            self._draw_stars()
 
         title = self.font_large.render("选择难度", True, COLOR_GOLD)
         self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 140)))
@@ -217,6 +230,36 @@ class Game:
 
         pygame.display.flip()
 
+    # ==================== 入场动画 ====================
+
+    def _run_ready_intro(self):
+        """玩家飞机从屏幕底部飞到起始位置"""
+        target_y = SCREEN_HEIGHT - 50
+        while self.state == "ready_intro" and self.running:
+            self.clock.tick(FPS)
+            # 处理事件，允许退出
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    pygame.quit()
+                    sys.exit()
+            # 飞机向上移动
+            if self.player.rect.bottom > target_y:
+                self.player.rect.bottom -= 5
+            else:
+                self.player.rect.bottom = target_y
+                self.state = "playing"
+                return
+            # 绘制
+            bg = self.backgrounds.get(1)
+            if bg:
+                self.screen.blit(bg, (0, 0))
+            else:
+                self.screen.fill(COLOR_BLACK)
+                self._draw_stars()
+            self.player.draw(self.screen)
+            pygame.display.flip()
+
     # ==================== 游戏初始化 ====================
 
     def _init_game(self):
@@ -234,6 +277,8 @@ class Game:
         self.boss_kill_count = 0
         self.kill_count = 0
         self.current_level = 1
+        self.stage_announce_timer = 0
+        self.stage_announce_text = ""
         self.is_gameover = False
 
         # 动态难度
@@ -288,6 +333,10 @@ class Game:
         self.survival_frames += 1
         self._update_dynamic_difficulty()
 
+        # 关卡公告倒计时
+        if self.stage_announce_timer > 0:
+            self.stage_announce_timer -= 1
+
         self.player_group.update()
         self.enemy_group.update()
         self.bullet_group.update()
@@ -318,10 +367,16 @@ class Game:
 
     def _update_level(self):
         """根据分数切换关卡背景"""
+        prev_level = self.current_level
         if self.score >= 500 and self.current_level < 3:
             self.current_level = 3
         elif self.score >= 200 and self.current_level < 2:
             self.current_level = 2
+
+        if self.current_level > prev_level:
+            stage_names = {2: "第二关", 3: "第三关"}
+            self.stage_announce_text = stage_names.get(self.current_level, "")
+            self.stage_announce_timer = 45  # 显示 0.75 秒
 
     def _spawn_supplies(self):
         """自动投放弹药、护盾、武器升级、生命恢复等补给道具"""
@@ -330,12 +385,15 @@ class Game:
             self.supply_spawn_timer = 0
             x = random.randint(30, SCREEN_WIDTH - 30)
             y = -20
+            # 生命恢复概率随难度递增
+            life_bounds = {"简单": 0.35, "普通": 0.55, "困难": 0.75}
+            shield_upper = {"简单": 0.75, "普通": 0.90, "困难": 0.95}
             r = random.random()
             if r < 0.35:
                 p = BulletBox(x, y)
-            elif r < 0.55:
+            elif r < life_bounds.get(self.difficulty, 0.55):
                 p = LifeRecovery(x, y)
-            elif r < 0.80:
+            elif r < shield_upper.get(self.difficulty, 0.80):
                 p = Shield(x, y)
             else:
                 p = WeaponUpgrade(x, y)
@@ -467,7 +525,7 @@ class Game:
                         else:
                             self.music_player.play_enemy_down(enemy.type_name)
                         # 掉落道具
-                        powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery)
+                        powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery, self.difficulty)
                         if powerup:
                             self.powerup_group.add(powerup)
                             self.all_sprites.add(powerup)
@@ -501,7 +559,7 @@ class Game:
                                 self.score += enemy.score_value
                                 self.kill_count += 1
                                 self.music_player.play_enemy_down(enemy.type_name)
-                                powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery)
+                                powerup = spawn_random_powerup(enemy.rect.centerx, enemy.rect.centery, self.difficulty)
                                 if powerup:
                                     self.powerup_group.add(powerup)
                                     self.all_sprites.add(powerup)
@@ -562,6 +620,11 @@ class Game:
         for powerup in self.powerup_group:
             self.screen.blit(powerup.image, powerup.rect)
 
+        # 关卡公告 — 屏幕正上方居中
+        if self.stage_announce_timer > 0:
+            announce = self.font_large.render(self.stage_announce_text, True, COLOR_GOLD)
+            self.screen.blit(announce, announce.get_rect(center=(SCREEN_WIDTH // 2, 60)))
+
         self._draw_hud()
         pygame.display.flip()
 
@@ -570,19 +633,10 @@ class Game:
         margin_x = 16
         margin_y = 12
         row_gap = 40
-        icon_size = 24
+        icon_size = 32
 
-        # --- 弹药显示：子弹图标 + 绝对数值 ---
-        ammo_icon = _try_load_image(IMG_BULLET, default_size=(icon_size, icon_size))
-        # 如果加载到的是占位灰色，则手动绘制一个黄色子弹图标
-        if ammo_icon.get_width() == icon_size and ammo_icon.get_height() == icon_size:
-            try:
-                if ammo_icon.get_at((0, 0))[:3] == (100, 100, 100):
-                    ammo_icon = pygame.Surface((icon_size, icon_size), pygame.SRCALPHA)
-                    pygame.draw.rect(ammo_icon, COLOR_YELLOW, (6, 0, 12, 20), border_radius=2)
-                    pygame.draw.rect(ammo_icon, (180, 130, 0), (4, 18, 16, 6), border_radius=2)
-            except Exception:
-                pass
+        # --- 弹药显示：ammo 图标 + 绝对数值 ---
+        ammo_icon = _try_load_image(IMG_AMMO, default_size=(icon_size, icon_size))
         self.screen.blit(ammo_icon, (margin_x, margin_y))
         ammo_text = self.font_medium.render(str(self.player.ammo), True, COLOR_WHITE)
         self.screen.blit(ammo_text, (margin_x + icon_size + 8, margin_y - 2))
@@ -629,9 +683,7 @@ class Game:
             fill_color = (255, 80, 80) if blink else (0, 200, 255)
             pygame.draw.rect(self.screen, fill_color, (bar_x, bar_y, int(bar_w * shield_remain), bar_h))
 
-        # --- 底部提示 ---
-        tip = self.font_small.render("移动:方向键  射击:空格/J  暂停:ESC", True, COLOR_GRAY)
-        self.screen.blit(tip, (SCREEN_WIDTH//2 - tip.get_width()//2, SCREEN_HEIGHT - 28))
+        # --- 底部提示已移除 ---
 
     # ==================== 暂停/游戏结束界面 ====================
 
@@ -700,6 +752,15 @@ class Game:
         return pygame.Rect(SCREEN_WIDTH//2 - BTN_WIDTH//2, y, BTN_WIDTH, BTN_HEIGHT)
 
     def _draw_paused(self):
+        # 先绘制当前关卡背景
+        bg = self.backgrounds.get(self.current_level)
+        if bg:
+            self.screen.blit(bg, (0, 0))
+        else:
+            self.screen.fill(COLOR_BLACK)
+            self._draw_stars()
+
+        # 绘制半透明遮罩
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         overlay.set_alpha(PAUSE_OVERLAY_ALPHA)
         overlay.fill(PAUSE_OVERLAY_COLOR)

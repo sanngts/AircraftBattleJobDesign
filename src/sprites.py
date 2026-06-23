@@ -69,6 +69,7 @@ class Player(pygame.sprite.Sprite):
         self.shield_timer = 0
         self.has_shield = False
         self.weapon_level = 1
+        self.difficulty = difficulty
 
     def _update_image(self):
         """根据血量切换图片"""
@@ -109,7 +110,7 @@ class Player(pygame.sprite.Sprite):
         if self.shoot_cooldown > 0 or self.ammo <= 0:
             return []
         self.shoot_cooldown = self.shoot_delay
-        self.ammo -= 1
+        self.ammo -= self.weapon_level  # 按子弹数量消耗弹药
 
         bullets = []
         if self.weapon_level == 1:
@@ -158,7 +159,9 @@ class Player(pygame.sprite.Sprite):
         self.invincible_timer = self.invincible_duration
         return self.hp <= 0
 
-    def add_ammo(self, amount=20):
+    def add_ammo(self, amount=None):
+        if amount is None:
+            amount = AMMO_PER_PICKUP.get(self.difficulty, 20)
         self.ammo = min(self.ammo + amount, self.max_ammo)
 
     def heal(self, amount=1):
@@ -321,8 +324,13 @@ class Bullet(pygame.sprite.Sprite):
             rad = math.radians(self.burst_angle)
             self.vel_x = self.speed * math.cos(rad)
             self.vel_y = self.speed * math.sin(rad)
+        elif self.bullet_type == ENEMY_BULLET_LASER:
+            # 激光束：直直往前飞，不追踪玩家
+            self.vel_x = 0
+            self.vel_y = self.speed * owner_sign
+            self.target = None  # 禁止追踪，仅垂直发射
         else:
-            # 普通弹 / 激光束：初始垂直向下
+            # 普通弹：初始垂直向下
             self.vel_x = 0
             self.vel_y = self.speed * owner_sign
 
@@ -453,7 +461,7 @@ class PowerUp(pygame.sprite.Sprite):
     def __init__(self, x, y, image_name, powerup_type):
         super().__init__()
         self.powerup_type = powerup_type
-        self.image = _try_load_image(image_name, default_size=(30, 30))
+        self.image = _try_load_image(image_name, default_size=(54, 54))
         self.rect = self.image.get_rect(center=(x, y))
         self.fall_speed = POWERUP_FALL_SPEED
 
@@ -499,16 +507,19 @@ class WeaponUpgrade(PowerUp):
         player.upgrade_weapon()
 
 
-def spawn_random_powerup(x, y):
-    """根据概率随机生成道具"""
+def spawn_random_powerup(x, y, difficulty="普通"):
+    """根据概率随机生成道具。难度越高，生命恢复出现概率越大"""
     if random.random() > POWERUP_DROP_CHANCE:
         return None
+    # 生命恢复概率随难度递增：简单15% / 普通25% / 困难35%
+    life_chances = {"简单": 0.50, "普通": 0.60, "困难": 0.70}
+    shield_chances = {"简单": 0.75, "普通": 0.80, "困难": 0.85}
     r = random.random()
     if r < 0.35:
         return BulletBox(x, y)
-    elif r < 0.60:
+    elif r < life_chances.get(difficulty, 0.60):
         return LifeRecovery(x, y)
-    elif r < 0.80:
+    elif r < shield_chances.get(difficulty, 0.80):
         return Shield(x, y)
     else:
         return WeaponUpgrade(x, y)
@@ -533,7 +544,7 @@ class EnemyType:
     """敌机类型定义 — 与图片素材一一对应"""
     ENEMY_1 = ("enemy_1", IMG_ENEMY_PLANE_1, IMG_ENEMY_PLANE_1_DAMAGED,
                IMG_ENEMY_PLANE_1_LOW_LIFE, IMG_ENEMY_PLANE_1_EXPLOSION,
-               ENEMY_HP["enemy_1"], (2.5, 4.5), 10, False, (45, 45))
+               ENEMY_HP["enemy_1"], (4.0, 6.5), 10, False, (45, 45))
     ENEMY_2 = ("enemy_2", IMG_ENEMY_PLANE_2, IMG_ENEMY_PLANE_2_DAMAGED,
                IMG_ENEMY_PLANE_2_LOW_LIFE, IMG_ENEMY_PLANE_2_EXPLOSION,
                ENEMY_HP["enemy_2"], (1.5, 3.5), 30, True, (50, 48))
