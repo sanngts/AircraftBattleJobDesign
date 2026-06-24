@@ -374,9 +374,9 @@ class Game:
     def _update_level(self):
         """根据分数切换关卡背景"""
         prev_level = self.current_level
-        if self.score >= 6000 and self.current_level < 3:
+        if self.score >= LEVEL_3_SCORE and self.current_level < 3:
             self.current_level = 3
-        elif self.score >= 3000 and self.current_level < 2:
+        elif self.score >= LEVEL_2_SCORE and self.current_level < 2:
             self.current_level = 2
 
         if self.current_level > prev_level:

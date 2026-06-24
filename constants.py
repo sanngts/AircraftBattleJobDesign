@@ -116,6 +116,41 @@ DYNAMIC_DIFFICULTY_MAX = 1.6       # 动态难度上限倍率
 DYNAMIC_DIFFICULTY_RAMP_SCORE = 600  # 达到最大难度的分数阈值
 SHOOT_TIMER_MIN = 14                # 敌机射击间隔下限（帧），防止后期过于密集
 
+# ---------- 关卡切换分数阈值 ----------
+LEVEL_2_SCORE = 3000          # 进入第二关所需分数
+LEVEL_3_SCORE = 6000          # 进入第三关所需分数
+
+# ---------- 游戏阶段分数阈值 ----------
+STAGE_EARLY_SCORE_MAX = 100   # 早期阶段最高分数
+STAGE_MID_SCORE_MAX = 350     # 中期阶段最高分数
+
+# ---------- 玩家通用 ----------
+PLAYER_Y_OFFSET = 50          # 玩家飞机距屏幕底部距离
+PLAYER_ENTRY_SPEED = 5        # 玩家入场动画速度
+
+# ---------- 血量/装甲显示阈值 ----------
+HP_RATIO_LOW_LIFE = 0.3       # 低于此比例显示濒死贴图
+HP_RATIO_DAMAGED = 0.6        # 低于此比例显示受损贴图
+
+# ---------- 武器系统 ----------
+MAX_WEAPON_LEVEL = 3          # 最大武器等级
+BULLET_MAX_LIFETIME = 600     # 子弹最大存活帧数（10秒 @60fps）
+BULLET_OOB_MARGIN = 40        # 子弹出边界回收距离
+
+# ---------- 敌人与碰撞 ----------
+BOSS_COLLISION_DAMAGE = 2     # Boss 撞击伤害
+ENEMY_COLLISION_DAMAGE = 1    # 普通敌机撞击伤害
+SPAWN_INTERVAL_MIN = 8        # 敌机生成间隔下限（帧）
+
+# ---------- 补给道具 ----------
+BULLET_BOX_BASE_CHANCE = 0.35 # 弹药箱基础掉落概率
+SUPPLY_SPAWN_Y = -20          # 补给投放出生 Y 坐标
+
+# ---------- 视觉特效 ----------
+BG_SCROLL_SPEED = 3           # 背景滚动速度
+STAGE_ANNOUNCE_FRAMES = 45    # 关卡公告显示帧数
+STAR_COUNT = 80               # 无背景图时星星数量
+
 # ---------- 敌方子弹类型 ----------
 ENEMY_BULLET_NORMAL = "normal"          # 普通直线弹
 ENEMY_BULLET_AIMED = "aimed"            # 追踪弹（有限追踪）
