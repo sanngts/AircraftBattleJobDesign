@@ -58,6 +58,7 @@ class Player(pygame.sprite.Sprite):
         self.invincible_duration = PLAYER_INVINCIBLE_TIME
         self.shield_timer = 0
         self.has_shield = False
+        self.shield_duration = SHIELD_DURATION  # 当前护盾的总时长（帧），可能被作弊模式覆盖
         self.weapon_level = 1
         self.difficulty = difficulty
         self._shield_cache = None  # 护盾光环 surface 缓存
@@ -156,9 +157,10 @@ class Player(pygame.sprite.Sprite):
     def heal(self, amount=1):
         self.hp = min(self.hp + amount, self.max_hp)
 
-    def activate_shield(self):
+    def activate_shield(self, duration=None):
         self.has_shield = True
-        self.shield_timer = SHIELD_DURATION
+        self.shield_duration = duration if duration is not None else SHIELD_DURATION
+        self.shield_timer = self.shield_duration
 
     def upgrade_weapon(self):
         self.weapon_level = min(self.weapon_level + 1, 3)
@@ -169,7 +171,7 @@ class Player(pygame.sprite.Sprite):
         screen.blit(self.image, self.rect)
         # 护盾光环效果
         if self.has_shield:
-            shield_ratio = self.shield_timer / SHIELD_DURATION
+            shield_ratio = self.shield_timer / max(1, self.shield_duration)
             alpha = int(100 + 80 * shield_ratio) 
             radius = max(self.rect.width, self.rect.height) // 2 + 8
             if self.shield_timer <= SHIELD_BLINK_START and (self.shield_timer // 15) % 2 == 0:

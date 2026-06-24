@@ -191,12 +191,12 @@ class Game:
                     return
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
-                difficulties = ["简单", "普通", "困难"]
-                for i, diff in enumerate(difficulties):
-                    btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
+                difficulty_options = [("简单", "简单"), ("普通", "普通"), ("困难", "困难"), ("作弊", "我还以为减速带呢")]
+                for i, (diff_key, _) in enumerate(difficulty_options):
+                    btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 230 + i * 80, 200, 50)
                     if btn_rect.collidepoint(mx, my):
                         self.music_player.play_button()
-                        self.difficulty = diff
+                        self.difficulty = diff_key
                         self._init_game()
                         # 玩家飞机从屏幕底部飞入
                         self.player.rect.bottom = SCREEN_HEIGHT + 60
@@ -214,17 +214,19 @@ class Game:
         title = self.font_large.render("选择难度", True, COLOR_GOLD)
         self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 140)))
 
-        difficulties = ["简单", "普通", "困难"]
-        colors = [COLOR_GREEN, COLOR_BLUE, COLOR_RED]
+        difficulty_options = [("简单", "简单"), ("普通", "普通"), ("困难", "困难"), ("作弊", "我还以为减速带呢")]
+        colors = [COLOR_GREEN, COLOR_BLUE, COLOR_RED, (160, 50, 255)]  # 作弊用紫色
         mx, my = pygame.mouse.get_pos()
 
-        for i, (diff, color) in enumerate(zip(difficulties, colors)):
-            btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 250 + i * 90, 200, 50)
+        for i, ((diff_key, diff_label), color) in enumerate(zip(difficulty_options, colors)):
+            btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 230 + i * 80, 200, 50)
             hover = btn_rect.collidepoint(mx, my)
             btn_color = color if not hover else tuple(min(c + 40, 255) for c in color)
             pygame.draw.rect(self.screen, btn_color, btn_rect, border_radius=10)
             pygame.draw.rect(self.screen, COLOR_WHITE, btn_rect, 2, border_radius=10)
-            btn_text = self.font_medium.render(diff, True, COLOR_WHITE)
+            # 作弊按钮文字较长，用小号字体
+            font = self.font_small if diff_key == "作弊" else self.font_medium
+            btn_text = font.render(diff_label, True, COLOR_WHITE)
             self.screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
         tip = self.font_small.render("按 ESC 返回主菜单", True, COLOR_GRAY)
@@ -298,6 +300,10 @@ class Game:
 
         # 开始背景音乐
         self.music_player.play_music()
+
+        # 作弊模式：开局激活1000秒特殊护盾
+        if self.difficulty == "作弊":
+            self.player.activate_shield(CHEAT_SHIELD_DURATION)
 
     # ==================== 游戏进行中 ====================
 
@@ -392,8 +398,8 @@ class Game:
             x = random.randint(30, SCREEN_WIDTH - 30)
             y = -20
             # 生命恢复概率随难度递增；武器升级大幅降低出现率
-            life_bounds = {"简单": 0.35, "普通": 0.55, "困难": 0.75}
-            shield_upper = {"简单": 0.93, "普通": 0.96, "困难": 0.97}
+            life_bounds = {"简单": 0.35, "普通": 0.55, "困难": 0.75, "作弊": 0.75}
+            shield_upper = {"简单": 0.93, "普通": 0.96, "困难": 0.97, "作弊": 0.97}
             r = random.random()
             if r < 0.35:
                 p = BulletBox(x, y)
@@ -559,12 +565,13 @@ class Game:
                 continue
             if self.player.rect.colliderect(enemy.rect):
                 if self.player.has_shield:
-                    # 护盾撞击：对非Boss敌机造成持续伤害
+                    # 护盾撞击：对非Boss敌机造成持续伤害（作弊模式2点/0.5秒）
                     if not enemy.is_boss:
                         enemy.shield_hit_timer -= 1
                         if enemy.shield_hit_timer <= 0:
                             enemy.shield_hit_timer = SHIELD_HIT_COOLDOWN
-                            if enemy.take_damage(1):
+                            shield_dmg = CHEAT_SHIELD_DAMAGE if self.difficulty == "作弊" else 1
+                            if enemy.take_damage(shield_dmg):
                                 self.score += enemy.score_value
                                 self.kill_count += 1
                                 self.music_player.play_enemy_down(enemy.type_name)
@@ -690,7 +697,7 @@ class Game:
 
         # --- 护盾状态 ---
         if self.player.has_shield:
-            shield_remain = self.player.shield_timer / SHIELD_DURATION
+            shield_remain = self.player.shield_timer / max(1, self.player.shield_duration)
             shield_seconds = max(0, self.player.shield_timer // FPS)
             # 最后3秒闪烁警告
             blink = self.player.shield_timer <= SHIELD_BLINK_START and (self.player.shield_timer // 15) % 2 == 0

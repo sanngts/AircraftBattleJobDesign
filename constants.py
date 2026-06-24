@@ -81,6 +81,7 @@ AMMO_PER_PICKUP = {
     "简单": 200,
     "普通": 100,
     "困难": 50,
+    "作弊": 50,
 }
 
 # ---------- 敌机属性 ----------
@@ -186,6 +187,7 @@ MAX_ENEMIES_LEVEL1 = {
     "简单": 5,
     "普通": 7,
     "困难": 9,
+    "作弊": 9,
 }
 
 # ---------- 道具属性 ----------
@@ -195,6 +197,8 @@ SHIELD_DURATION = 600       # 护盾持续时间（帧 @60fps = 10秒）
 SHIELD_BLINK_START = 180    # 护盾最后3秒开始闪烁提示
 ENEMY_EXPLOSION_DURATION = 12  # 敌机爆炸动画持续时间（帧 @60fps = 0.2秒）
 SHIELD_HIT_COOLDOWN = 30    # 护盾撞击敌机伤害冷却（帧 @60fps = 0.5秒）
+CHEAT_SHIELD_DURATION = 60000  # 作弊模式护盾持续时间（帧 @60fps = 1000秒）
+CHEAT_SHIELD_DAMAGE = 30       # 作弊模式护盾撞击伤害
 SUPPLY_SPAWN_INTERVAL = 420  # 补给道具自动投放间隔（帧 @60fps ≈ 7秒）
 
 # ---------- 难度倍率 ----------
@@ -204,6 +208,8 @@ DIFFICULTY_MULTIPLIER = {
     "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "enemy_speed": 1.0, "score": 1.0,
              "bullet_count": 0.75},
     "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5,
+             "bullet_count": 1.0},
+    "作弊": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5,
              "bullet_count": 1.0},
 }
 
