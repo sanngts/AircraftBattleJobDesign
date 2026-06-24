@@ -374,9 +374,9 @@ class Game:
     def _update_level(self):
         """根据分数切换关卡背景"""
         prev_level = self.current_level
-        if self.score >= 6000 and self.current_level < 3:
+        if self.score >= LEVEL_3_SCORE and self.current_level < 3:
             self.current_level = 3
-        elif self.score >= 3000 and self.current_level < 2:
+        elif self.score >= LEVEL_2_SCORE and self.current_level < 2:
             self.current_level = 2
 
         if self.current_level > prev_level:
@@ -407,8 +407,11 @@ class Game:
             self.all_sprites.add(p)
 
     def _spawn_enemies(self):
-        # 屏幕敌机数量已达上限，不再生成
-        if len(self.enemy_group) >= MAX_ENEMIES_ON_SCREEN:
+        # 屏幕敌机数量已达上限，不再生成（第一关按难度区分上限）
+        max_enemies = MAX_ENEMIES_ON_SCREEN
+        if self.current_level == 1:
+            max_enemies = MAX_ENEMIES_LEVEL1.get(self.difficulty, MAX_ENEMIES_ON_SCREEN)
+        if len(self.enemy_group) >= max_enemies:
             return
 
         mult = DIFFICULTY_MULTIPLIER[self.difficulty]
@@ -422,6 +425,7 @@ class Game:
 
             if self.kill_count >= BOSS_TRIGGER_KILLS and not self.boss_spawned:
                 boss = Enemy(EnemyType.BOSS, mult["enemy_hp"], mult["enemy_speed"],
+                             bullet_count_mult=mult.get("bullet_count", 1.0),
                              player=self.player, game_state=self)
                 self.enemy_group.add(boss)
                 self.all_sprites.add(boss)
@@ -445,17 +449,16 @@ class Game:
         """根据游戏阶段和动态难度生成不同策略的敌机编队"""
         r = random.random()
         dyn = self.dynamic_difficulty  # 动态难度倍率 (0.35 ~ 1.6)
+        bcm = mult.get("bullet_count", 1.0)  # 子弹数量缩放系数
 
         if stage == "early":
-            # 早期：以 enemy_1 为主，enemy_2/enemy_3 较少出现
+            # 第一关：仅生成 enemy_1 和 enemy_2，不生成 enemy_3
             if r < 0.85:
                 enemy_type = EnemyType.ENEMY_1
-            elif r < 0.97:
-                enemy_type = EnemyType.ENEMY_2
             else:
-                enemy_type = EnemyType.ENEMY_3
+                enemy_type = EnemyType.ENEMY_2
             enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
-                          player=self.player, game_state=self)
+                          bullet_count_mult=bcm, player=self.player, game_state=self)
 
         elif stage == "mid":
             # 中期：增加交叉封锁编队
@@ -466,13 +469,13 @@ class Game:
             else:
                 enemy_type = EnemyType.ENEMY_3
             enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
-                          player=self.player, game_state=self)
+                          bullet_count_mult=bcm, player=self.player, game_state=self)
 
             # 偶尔生成交叉编队（同时生成两架 enemy_2），动态难度高时概率更大
             cross_chance = 0.1 + dyn * 0.18  # 0.16 ~ 0.39
             if random.random() < cross_chance:
                 enemy2 = Enemy(EnemyType.ENEMY_2, mult["enemy_hp"], mult["enemy_speed"],
-                               player=self.player, game_state=self)
+                               bullet_count_mult=bcm, player=self.player, game_state=self)
                 # 让两架敌机初始处于交叉封锁状态
                 enemy2._enter_state(STATE_CROSS)
                 enemy2.ai_data["cross_target_x"] = SCREEN_WIDTH - enemy.rect.centerx
@@ -490,7 +493,7 @@ class Game:
             else:
                 enemy_type = EnemyType.ENEMY_3
             enemy = Enemy(enemy_type, mult["enemy_hp"], mult["enemy_speed"],
-                          player=self.player, game_state=self)
+                          bullet_count_mult=bcm, player=self.player, game_state=self)
 
             # 后期预判射击型敌机概率随动态难度增长
             lead_chance = 0.1 + dyn * 0.2  # 0.17 ~ 0.42
@@ -501,7 +504,7 @@ class Game:
             hover_chance = 0.08 + dyn * 0.18  # 0.14 ~ 0.37
             if random.random() < hover_chance:
                 hover_enemy = Enemy(EnemyType.ENEMY_2, mult["enemy_hp"], mult["enemy_speed"],
-                                    player=self.player, game_state=self)
+                                    bullet_count_mult=bcm, player=self.player, game_state=self)
                 hover_enemy._enter_state(STATE_HOVER)
                 hover_enemy.rect.x = random.randint(40, SCREEN_WIDTH - 40)
                 hover_enemy.rect.y = random.randint(60, SCREEN_HEIGHT // 3)

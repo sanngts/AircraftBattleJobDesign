@@ -74,7 +74,7 @@ PLAYER_INIT_HP = 8          # 初始生命值
 PLAYER_SPEED = 7            # 移动速度（像素/帧）
 PLAYER_INIT_SCORE = 0       # 初始分数
 PLAYER_INVINCIBLE_TIME = 60 # 受伤后无敌帧数（约1秒）
-PLAYER_AMMO_MAX = 300        # 最大弹药
+PLAYER_AMMO_MAX = 900        # 最大弹药
 
 # 弹药补给量（按难度）
 AMMO_PER_PICKUP = {
@@ -174,8 +174,19 @@ CROSS_SPEED = 4                # 交叉飞行速度
 CHARGE_SPEED = 5               # 冲刺速度
 RETREAT_SPEED = 3              # 撤退速度
 
+# ---------- 关卡切换分数阈值 ----------
+LEVEL_2_SCORE = 900           # 进入第二关所需分数
+LEVEL_3_SCORE = 6000          # 进入第三关所需分数
+
 # ---------- 屏幕敌机上限 ----------
-MAX_ENEMIES_ON_SCREEN = 10      # 屏幕上同时存在的最大敌机数量
+MAX_ENEMIES_ON_SCREEN = 10      # 屏幕上同时存在的最大敌机数量（默认）
+
+# 各难度第一关屏幕敌机上限
+MAX_ENEMIES_LEVEL1 = {
+    "简单": 5,
+    "普通": 7,
+    "困难": 9,
+}
 
 # ---------- 道具属性 ----------
 POWERUP_DROP_CHANCE = 0.2   # 敌机死亡掉落道具概率
@@ -188,9 +199,12 @@ SUPPLY_SPAWN_INTERVAL = 420  # 补给道具自动投放间隔（帧 @60fps ≈ 7
 
 # ---------- 难度倍率 ----------
 DIFFICULTY_MULTIPLIER = {
-    "简单": {"hp": 1.0, "spawn_rate": 0.5, "enemy_hp": 0.6, "enemy_speed": 0.6, "score": 0.8},
-    "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "enemy_speed": 1.0, "score": 1.0},
-    "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5},
+    "简单": {"hp": 1.0, "spawn_rate": 0.5, "enemy_hp": 0.6, "enemy_speed": 0.6, "score": 0.8,
+             "bullet_count": 0.55},
+    "普通": {"hp": 1.0, "spawn_rate": 1.0, "enemy_hp": 1.0, "enemy_speed": 1.0, "score": 1.0,
+             "bullet_count": 0.75},
+    "困难": {"hp": 0.7, "spawn_rate": 1.4, "enemy_hp": 1.5, "enemy_speed": 1.3, "score": 1.5,
+             "bullet_count": 1.0},
 }
 
 # ---------- 界面遮罩 ----------

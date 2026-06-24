@@ -405,25 +405,28 @@ def create_enemy_bullet(bullet_type, x, y, target=None, speed_mult=1.0, **kwargs
     return bullet
 
 
-def create_enemy_bullet_volley(volley_type, x, y, target=None, speed_mult=1.0):
-    """创建子弹阵列（散弹/激光束/爆发弹等），返回子弹列表"""
+def create_enemy_bullet_volley(volley_type, x, y, target=None, speed_mult=1.0, count_mult=1.0):
+    """创建子弹阵列（散弹/激光束/爆发弹等），返回子弹列表。count_mult 缩放数量。"""
     bullets = []
 
     if volley_type == ENEMY_BULLET_SPREAD:
-        half = (SPREAD_COUNT - 1) / 2
-        for i in range(SPREAD_COUNT):
-            angle = (i - half) * (SPREAD_ANGLE / (SPREAD_COUNT - 1)) if SPREAD_COUNT > 1 else 0
+        actual_count = max(1, int(SPREAD_COUNT * count_mult))
+        half = (actual_count - 1) / 2
+        for i in range(actual_count):
+            angle = (i - half) * (SPREAD_ANGLE / (actual_count - 1)) if actual_count > 1 else 0
             bullets.append(create_enemy_bullet(ENEMY_BULLET_SPREAD, x, y, target, speed_mult,
                                                spread_angle=angle))
     elif volley_type == ENEMY_BULLET_BURST:
-        for i in range(BURST_COUNT):
-            angle = i * (360 / BURST_COUNT)
+        actual_count = max(2, int(BURST_COUNT * count_mult))
+        for i in range(actual_count):
+            angle = i * (360 / actual_count)
             bullets.append(create_enemy_bullet(ENEMY_BULLET_BURST, x, y, target, speed_mult,
                                                burst_angle=angle))
     elif volley_type == ENEMY_BULLET_LASER:
-        # 激光束阵列：并排发射多条长条光束
-        for i in range(LASER_COUNT):
-            offset_x = (i - (LASER_COUNT - 1) / 2) * (LASER_WIDTH + 4)
+        # 激光束阵列：并排发射多条长条光束，数量受 count_mult 缩放
+        actual_count = max(1, int(LASER_COUNT * count_mult))
+        for i in range(actual_count):
+            offset_x = (i - (actual_count - 1) / 2) * (LASER_WIDTH + 4)
             bullets.append(create_enemy_bullet(ENEMY_BULLET_LASER, x + offset_x, y, target, speed_mult))
     elif volley_type == ENEMY_BULLET_AIMED:
         bullets.append(create_enemy_bullet(ENEMY_BULLET_AIMED, x, y, target, speed_mult))
@@ -529,7 +532,7 @@ class EnemyType:
 
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, enemy_type, difficulty_mult=1.0, difficulty_speed_mult=1.0,
-                 player=None, game_state=None):
+                 bullet_count_mult=1.0, player=None, game_state=None):
         super().__init__()
         name, img_n, img_d, img_l, img_e, hp, speed_range, score, can_shoot, size = enemy_type
         self.type_name = name
@@ -547,6 +550,7 @@ class Enemy(pygame.sprite.Sprite):
         self.base_speed_y = random.uniform(speed_min, speed_max) * difficulty_speed_mult
         self.base_speed_x = random.uniform(-0.6, 0.6) * difficulty_speed_mult
         self.speed_mult = difficulty_speed_mult
+        self.bullet_count_mult = bullet_count_mult
         self.max_hp = max(1, int(hp * difficulty_mult))
         self.hp = self.max_hp
         self.score_value = int(score)
@@ -967,7 +971,7 @@ class Enemy(pygame.sprite.Sprite):
         self._update_image()
 
     def shoot(self, player=None):
-        """射击：根据 AI 状态选择不同弹道模式，受动态难度影响频率"""
+        """射击：根据 AI 状态选择不同弹道模式，受动态难度影响频率和数量"""
         bullets = []
 
         if self.is_boss:
@@ -981,6 +985,7 @@ class Enemy(pygame.sprite.Sprite):
         if self.game_state:
             dyn_diff = max(0.3, getattr(self.game_state, 'dynamic_difficulty', 1.0))
         freq_mult = 1.0 / dyn_diff  # 低难度→倍率大(间隔长)，高难度→倍率小(间隔短)
+        bc = self.bullet_count_mult   # 子弹数量缩放系数
 
         cx, cy = self.rect.centerx, self.rect.bottom
 
@@ -988,10 +993,10 @@ class Enemy(pygame.sprite.Sprite):
             # 悬停射击：散弹 + 普通弹交替
             if random.random() < 0.4:
                 self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(40, 70) * freq_mult))
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult, bc)
             else:
                 self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(20, 35) * freq_mult))
-                count = 5 if dyn_diff > 0.7 else 3  # 普通弹多发齐射
+                count = max(1, int((5 if dyn_diff > 0.7 else 3) * bc))
                 for _ in range(count):
                     ox = cx + random.randint(-20, 20)
                     bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
@@ -1000,31 +1005,34 @@ class Enemy(pygame.sprite.Sprite):
             # 交叉封锁：激光束 或 普通弹齐射
             self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(30, 55) * freq_mult))
             if dyn_diff > 0.5 and random.random() < 0.45:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult, bc)
             else:
-                for i in range(5):
-                    ox = cx + (i - 2) * 12
+                count = max(1, int(5 * bc))
+                for i in range(count):
+                    ox = cx + (i - (count - 1) / 2) * 12
                     bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
 
         elif self.ai_state == STATE_ORBIT:
-            # 环绕飞行：普通弹3发齐射
+            # 环绕飞行：普通弹齐射
             self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(50, 90) * freq_mult))
-            for i in range(3):
-                ox = cx + (i - 1) * 14
+            count = max(1, int(3 * bc))
+            for i in range(count):
+                ox = cx + (i - (count - 1) / 2) * 14
                 bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
 
         elif self.ai_state == STATE_CHARGE:
             # 冲刺：偶尔爆发弹或普通弹
             self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(35, 70) * freq_mult))
             if dyn_diff > 0.6 and random.random() < 0.4:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult, bc)
             else:
-                for i in range(3):
-                    ox = cx + (i - 1) * 12
+                count = max(1, int(3 * bc))
+                for i in range(count):
+                    ox = cx + (i - (count - 1) / 2) * 12
                     bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
 
         elif self.ai_state == STATE_LEAD_SHOT:
-            # 预判射击：朝玩家移动趋势方向发射激光束（替换追踪弹）
+            # 预判射击：朝玩家移动趋势方向发射激光束
             self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(35, 65) * freq_mult))
             # 计算预判位置
             lead_x = cx
@@ -1035,10 +1043,11 @@ class Enemy(pygame.sprite.Sprite):
                 lead_distance = 35
                 lead_x = player.rect.centerx + pdx * lead_distance
                 lead_y = player.rect.centery + pdy * lead_distance
-            # 朝预判方向发射激光束
-            count = 2 if dyn_diff > 0.6 else 1
+            # 朝预判方向发射激光束，数量受难度缩放
+            base_count = 2 if dyn_diff > 0.6 else 1
+            count = max(1, int(base_count * bc))
             for i in range(count):
-                ox = cx + (i - 0.5) * 20  # 错位发射
+                ox = cx + (i - (count - 1) / 2) * 20  # 错位发射
                 bullet = create_enemy_bullet(ENEMY_BULLET_LASER, ox, cy, None, self.speed_mult)
                 if player:
                     dx = lead_x - ox
@@ -1050,15 +1059,17 @@ class Enemy(pygame.sprite.Sprite):
                 bullets.append(bullet)
 
         else:
-            # 默认：普通直线弹2发
+            # 默认：普通直线弹
             self.shoot_timer = max(SHOOT_TIMER_MIN, int(random.randint(60, 130) * freq_mult))
-            bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, cx - 8, cy, player, self.speed_mult))
-            bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, cx + 8, cy, player, self.speed_mult))
+            count = max(1, int(2 * bc))
+            for i in range(count):
+                ox = cx + (i - (count - 1) / 2) * 8
+                bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
 
         return bullets
 
     def _boss_shoot(self, player):
-        """Boss 弹幕系统 — 根据血量阶段切换攻击模式"""
+        """Boss 弹幕系统 — 根据血量阶段切换攻击模式，子弹数量受难度缩放"""
         bullets = []
 
         if self.barrage_timer > 0:
@@ -1066,50 +1077,52 @@ class Enemy(pygame.sprite.Sprite):
 
         hp_ratio = self.hp / self.max_hp
         cx, cy = self.rect.centerx, self.rect.bottom
+        bc = self.bullet_count_mult  # 难度缩放系数
 
         # 阶段 1: 高血量 — 扇形散弹 + 普通弹
         if hp_ratio > 0.6:
             self.barrage_timer = BOSS_BARRAGE_INTERVAL
             self.barrage_phase = (self.barrage_phase + 1) % 3
             if self.barrage_phase == 0:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult, bc)
             elif self.barrage_phase == 1:
-                for _ in range(5):
+                count = max(1, int(5 * bc))
+                for _ in range(count):
                     ox = cx + random.randint(-40, 40)
                     bullets.append(create_enemy_bullet(ENEMY_BULLET_NORMAL, ox, cy, player, self.speed_mult))
             else:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult, bc)
 
         # 阶段 2: 中血量 — 激光束 + 散弹
         elif hp_ratio > 0.3:
             self.barrage_timer = BOSS_BARRAGE_INTERVAL // 2
             self.barrage_phase = (self.barrage_phase + 1) % 3
             if self.barrage_phase == 0:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx, cy, player, self.speed_mult, bc)
             elif self.barrage_phase == 1:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 20, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 20, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 20, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 20, cy, player, self.speed_mult, bc)
             else:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult, bc)
 
         # 阶段 3: 低血量 — 全弹幕倾泻
         else:
             self.barrage_timer = BOSS_BARRAGE_INTERVAL // 3
             self.barrage_phase = (self.barrage_phase + 1) % 4
             if self.barrage_phase == 0:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx, cy, player, self.speed_mult, bc)
             elif self.barrage_phase == 1:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx - 30, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx + 30, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx - 30, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_SPREAD, cx + 30, cy, player, self.speed_mult, bc)
             elif self.barrage_phase == 2:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 25, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 25, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 25, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 25, cy, player, self.speed_mult, bc)
             else:
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 30, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 30, cy, player, self.speed_mult)
-                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx - 30, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_LASER, cx + 30, cy, player, self.speed_mult, bc)
+                bullets += create_enemy_bullet_volley(ENEMY_BULLET_BURST, cx, cy, player, self.speed_mult, bc)
 
         return bullets
 
