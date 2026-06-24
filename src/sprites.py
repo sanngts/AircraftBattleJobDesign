@@ -158,9 +158,14 @@ class Player(pygame.sprite.Sprite):
         self.hp = min(self.hp + amount, self.max_hp)
 
     def activate_shield(self, duration=None):
+        new_duration = duration if duration is not None else SHIELD_DURATION
+        # 已有护盾且剩余时间更长时，不覆盖（防止作弊护盾被普通护盾缩短）
+        if self.shield_timer >= new_duration:
+            self.has_shield = True
+            return
         self.has_shield = True
-        self.shield_duration = duration if duration is not None else SHIELD_DURATION
-        self.shield_timer = self.shield_duration
+        self.shield_duration = new_duration
+        self.shield_timer = new_duration
 
     def upgrade_weapon(self):
         self.weapon_level = min(self.weapon_level + 1, 3)
