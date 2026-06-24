@@ -3,11 +3,7 @@ import random
 import math
 import os
 from constants import *
-
-# ============================================================
-# 图片加载工具 — 素材未就绪时返回占位图形
-# ============================================================
-
+#占位图片
 def _try_load_image(filename, default_size=(50, 50)):
     """尝试加载图片并缩放到 default_size，不存在则返回带文字标记的占位 surface"""
     path = os.path.join(IMAGE_PATH, filename)
@@ -16,7 +12,6 @@ def _try_load_image(filename, default_size=(50, 50)):
         img = pygame.transform.scale(img, default_size)
         return img
     except (pygame.error, FileNotFoundError):
-        # 占位图形：灰色矩形 + 文件名缩写
         w, h = default_size
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         surf.fill((100, 100, 100))
@@ -34,11 +29,6 @@ def _load_image_set(normal, damaged=None, low_life=None, explosion=None, default
     if explosion:
         imgs["explosion"] = _try_load_image(explosion, default_size)
     return imgs
-
-
-# ============================================================
-# 玩家飞机
-# ============================================================
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, difficulty="普通"):
@@ -70,9 +60,10 @@ class Player(pygame.sprite.Sprite):
         self.has_shield = False
         self.weapon_level = 1
         self.difficulty = difficulty
+        self._shield_cache = None  # 护盾光环 surface 缓存
 
     def _update_image(self):
-        """根据血量切换图片"""
+    #根据敌机血量切换图片
         hp_ratio = self.hp / self.max_hp
         if hp_ratio <= 0.3 and "low_life" in self.images:
             self.image = self.images["low_life"]
@@ -106,7 +97,6 @@ class Player(pygame.sprite.Sprite):
         self._update_image()
 
     def shoot(self):
-        """射击，返回子弹列表（武器升级后可多发）"""
         if self.shoot_cooldown > 0 or self.ammo <= 0:
             return []
         self.shoot_cooldown = self.shoot_delay
@@ -141,7 +131,6 @@ class Player(pygame.sprite.Sprite):
         return bullets
 
     def trigger_explosion(self):
-        """触发爆炸状态：显示爆炸图片 0.5 秒后消失"""
         self.exploding = True
         self.explode_timer = ENEMY_EXPLOSION_DURATION
         # 替换为共享爆炸素材，缩放至敌机尺寸
@@ -154,7 +143,7 @@ class Player(pygame.sprite.Sprite):
         if self.invincible_timer > 0:
             return False
         if self.has_shield:
-            return False  # 护盾持续期间完全免疫所有伤害，不消耗护盾
+            return False
         self.hp -= damage
         self.invincible_timer = self.invincible_duration
         return self.hp <= 0
@@ -181,27 +170,30 @@ class Player(pygame.sprite.Sprite):
         # 护盾光环效果
         if self.has_shield:
             shield_ratio = self.shield_timer / SHIELD_DURATION
-            alpha = int(100 + 80 * shield_ratio)  # 透明度随剩余时间减少
+            alpha = int(100 + 80 * shield_ratio) 
             radius = max(self.rect.width, self.rect.height) // 2 + 8
-
-            # 外层光环
             if self.shield_timer <= SHIELD_BLINK_START and (self.shield_timer // 15) % 2 == 0:
-                color = (255, 60, 60, alpha)  # 闪烁红色警告
+                color = (255, 60, 60, alpha) 
             else:
                 color = (0, 200, 255, alpha)
 
-            shield_surf = pygame.Surface((radius * 2 + 10, radius * 2 + 10), pygame.SRCALPHA)
-            # 多层光环
+            surf_w = radius * 2 + 10
+            surf_h = radius * 2 + 10
+            if self._shield_cache is None or self._shield_cache.get_size() != (surf_w, surf_h):
+                self._shield_cache = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+            else:
+                self._shield_cache.fill((0, 0, 0, 0))
+            shield_surf = self._shield_cache
+            # 护盾光环
             for offset in range(3):
                 r = radius + offset * 3
                 a = alpha // (offset + 1)
                 pygame.draw.circle(shield_surf, (*color[:3], a),
-                                   (shield_surf.get_width() // 2, shield_surf.get_height() // 2), r, 2)
+                                   (surf_w // 2, surf_h // 2), r, 2)
             screen.blit(shield_surf, (self.rect.centerx - shield_surf.get_width() // 2,
                                        self.rect.centery - shield_surf.get_height() // 2))
 
             # 粒子效果
-            import random
             particle_count = 6
             for i in range(particle_count):
                 angle = (pygame.time.get_ticks() * 0.003 + i * math.pi * 2 / particle_count) % (math.pi * 2)
@@ -209,12 +201,7 @@ class Player(pygame.sprite.Sprite):
                 py = self.rect.centery + radius * math.sin(angle)
                 pygame.draw.circle(screen, (*color[:3], min(255, alpha + 40)), (int(px), int(py)), 2)
 
-
-# ============================================================
 # 子弹系统 — 支持多种轨迹形态、伤害值与运动模式
-# ============================================================
-
-# ---------- 子弹外观配置 ----------
 BULLET_COLORS = {
     "player": {
         ENEMY_BULLET_NORMAL: None,  # 玩家子弹用玩家颜色
@@ -223,7 +210,7 @@ BULLET_COLORS = {
         ENEMY_BULLET_NORMAL: COLOR_RED,
         ENEMY_BULLET_AIMED: (255, 100, 0),
         ENEMY_BULLET_SPREAD: (255, 140, 0),
-        ENEMY_BULLET_LASER: (0, 220, 255),    # 激光束：亮青蓝色
+        ENEMY_BULLET_LASER: (0, 220, 255),
         ENEMY_BULLET_BURST: (255, 0, 100),
     },
 }
@@ -232,14 +219,12 @@ BULLET_SIZES = {
     ENEMY_BULLET_NORMAL: (5, 14),
     ENEMY_BULLET_AIMED: (5, 14),
     ENEMY_BULLET_SPREAD: (4, 12),
-    ENEMY_BULLET_LASER: (LASER_WIDTH, LASER_HEIGHT),  # 长条光束
+    ENEMY_BULLET_LASER: (LASER_WIDTH, LASER_HEIGHT),
     ENEMY_BULLET_BURST: (6, 6),
 }
 
 
 class Bullet(pygame.sprite.Sprite):
-    """通用子弹 — 支持多种运动轨迹（直线 / 有限追踪 / 散弹 / 激光束 / 圆环爆发）"""
-
     def __init__(self, x, y, bullet_type=ENEMY_BULLET_NORMAL, owner="player",
                  damage=None, target=None, spread_angle=0, burst_angle=0):
         super().__init__()
@@ -253,36 +238,33 @@ class Bullet(pygame.sprite.Sprite):
         if owner == "player":
             self.image = _try_load_image(IMG_BULLET, default_size=size)
             if self.image.get_width() == size[0] and self.image.get_height() == size[1] and self.image.get_at((0, 0)) == (100, 100, 100, 255):
-                self.image = pygame.Surface(size, pygame.SRCALPHA)
+                self.image = pygame.Surface(size, pygame.SRCALPHA).convert_alpha()
                 self.image.fill(COLOR_YELLOW)
         else:
             color = BULLET_COLORS["enemy"].get(bullet_type, COLOR_RED)
             if bullet_type == ENEMY_BULLET_LASER:
-                # 激光束：长条渐变光束，中间亮、边缘透明
-                self.image = pygame.Surface(size, pygame.SRCALPHA)
+                self.image = pygame.Surface(size, pygame.SRCALPHA).convert_alpha()
                 r, g, b = color
                 h = size[1]
                 for row in range(h):
-                    # 边缘暗、中间亮的光柱渐变
                     ratio = 1.0 - abs(row - h // 2) / (h // 2)
                     alpha = int(80 + 175 * ratio)
                     pygame.draw.line(self.image, (r, g, b, alpha), (0, row), (size[0], row))
-                # 白色高亮核心线
                 pygame.draw.line(self.image, (255, 255, 255, 200), (size[0] // 2, 0), (size[0] // 2, h), max(1, size[0] // 4))
             elif bullet_type == ENEMY_BULLET_BURST:
-                self.image = pygame.Surface(size, pygame.SRCALPHA)
+                self.image = pygame.Surface(size, pygame.SRCALPHA).convert_alpha()
                 pygame.draw.circle(self.image, color, (size[0] // 2, size[1] // 2), size[0] // 2)
             else:
-                self.image = pygame.Surface(size, pygame.SRCALPHA)
+                self.image = pygame.Surface(size, pygame.SRCALPHA).convert_alpha()
                 pygame.draw.rect(self.image, color, (0, 0, size[0], size[1]), border_radius=2)
 
         self.rect = self.image.get_rect(center=(x, y))
-        self.mask = pygame.mask.from_surface(self.image)  # 像素级碰撞掩码
+        self.mask = pygame.mask.from_surface(self.image)
 
         # 物理属性
         self.speed = ENEMY_BULLET_SPEEDS.get(bullet_type, ENEMY_BULLET_SPEED)
         self.damage = damage if damage is not None else ENEMY_BULLET_DAMAGE.get(bullet_type, 1)
-        self.target = target          # 追踪弹目标（玩家精灵）
+        self.target = target
         self.spread_angle = spread_angle
         self.burst_angle = burst_angle
         self.distance_traveled = 0
@@ -290,7 +272,7 @@ class Bullet(pygame.sprite.Sprite):
         # 根据子弹类型初始化速度分量
         self._init_velocity()
 
-        # 存活时间上限（帧），防止子弹永久存在
+        # 子弹存活时间
         self.max_lifetime = 600  # 5秒 @ 60fps
         self.lifetime = 0
 
@@ -302,7 +284,7 @@ class Bullet(pygame.sprite.Sprite):
         owner_sign = -1 if self.owner == "player" else 1
 
         if self.bullet_type == ENEMY_BULLET_AIMED:
-            # 追踪弹：初始方向朝玩家，后续每帧有限调整
+            # 追踪弹
             if self.target:
                 dx = self.target.rect.centerx - self.rect.centerx
                 dy = self.target.rect.centery - self.rect.centery
@@ -315,17 +297,17 @@ class Bullet(pygame.sprite.Sprite):
             else:
                 self.vel_x, self.vel_y = 0, self.speed * owner_sign
         elif self.bullet_type == ENEMY_BULLET_SPREAD:
-            # 散弹：按指定角度偏移
-            rad = math.radians(self.spread_angle + 90)  # +90 使 0 度 = 正下方
+            # 散弹
+            rad = math.radians(self.spread_angle + 90)
             self.vel_x = self.speed * math.cos(rad)
             self.vel_y = self.speed * math.sin(rad)
         elif self.bullet_type == ENEMY_BULLET_BURST:
-            # 圆环爆发弹：朝 burst_angle 方向匀速
+            # 圆环爆发弹
             rad = math.radians(self.burst_angle)
             self.vel_x = self.speed * math.cos(rad)
             self.vel_y = self.speed * math.sin(rad)
         elif self.bullet_type == ENEMY_BULLET_LASER:
-            # 激光束：直直往前飞，不追踪玩家
+            # 激光束
             self.vel_x = 0
             self.vel_y = self.speed * owner_sign
             self.target = None  # 禁止追踪，仅垂直发射
@@ -349,7 +331,7 @@ class Bullet(pygame.sprite.Sprite):
         else:
             self._update_linear()
 
-        # 边界回收：超出屏幕四周任意方向则销毁
+        #超出屏幕四周任意方向则销毁
         margin = 40
         if (self.rect.bottom < -margin or self.rect.top > SCREEN_HEIGHT + margin or
                 self.rect.right < -margin or self.rect.left > SCREEN_WIDTH + margin):
@@ -367,7 +349,6 @@ class Bullet(pygame.sprite.Sprite):
         self.distance_traveled += abs(self.vel_x) + abs(self.vel_y)
 
     def _update_aimed(self):
-        """追踪弹：有限追踪 — 持续时间衰减 + 禁止往回飞（违反弹药物理原理）"""
         self.track_lifetime += 1
         track_elapsed = self.track_lifetime / AIMED_TRACK_DURATION  # 0 → 1
 
@@ -451,11 +432,6 @@ def create_enemy_bullet_volley(volley_type, x, y, target=None, speed_mult=1.0):
 
     return bullets
 
-
-# ============================================================
-# 道具
-# ============================================================
-
 class PowerUp(pygame.sprite.Sprite):
     """道具基类"""
     def __init__(self, x, y, image_name, powerup_type):
@@ -511,9 +487,9 @@ def spawn_random_powerup(x, y, difficulty="普通"):
     """根据概率随机生成道具。难度越高，生命恢复出现概率越大"""
     if random.random() > POWERUP_DROP_CHANCE:
         return None
-    # 生命恢复概率随难度递增：简单15% / 普通25% / 困难35%
+    # 生命恢复概率随难度递增；武器升级大幅降低出现率
     life_chances = {"简单": 0.50, "普通": 0.60, "困难": 0.70}
-    shield_chances = {"简单": 0.75, "普通": 0.80, "困难": 0.85}
+    shield_chances = {"简单": 0.92, "普通": 0.94, "困难": 0.95}
     r = random.random()
     if r < 0.35:
         return BulletBox(x, y)
@@ -523,11 +499,6 @@ def spawn_random_powerup(x, y, difficulty="普通"):
         return Shield(x, y)
     else:
         return WeaponUpgrade(x, y)
-
-
-# ============================================================
-# 敌机
-# ============================================================
 
 # 共享爆炸素材（所有敌机共用）
 _EXPLODE_IMAGE = None
@@ -609,13 +580,10 @@ class Enemy(pygame.sprite.Sprite):
         self.ai_data["enter_target_y"] = random.randint(
             int(SCREEN_HEIGHT * 0.15), int(SCREEN_HEIGHT * 0.40)
         )
-
-    # ==================== AI 状态调度 ====================
-
     def _select_next_state(self):
         """根据敌机类型和当前上下文选择下一行为模式"""
         if self.is_boss:
-            return  # Boss 不走状态机，用弹幕系统
+            return
 
         # 只能往前飞的敌机（enemy_1、enemy_2）：简化为正面飞越行为
         if self.forward_only:
@@ -756,8 +724,6 @@ class Enemy(pygame.sprite.Sprite):
 
         elif state == STATE_ENTER:
             self._init_enter_state()
-
-    # ==================== 各状态更新逻辑 ====================
 
     def _update_ai(self):
         """每帧更新 AI 状态机"""
@@ -948,8 +914,6 @@ class Enemy(pygame.sprite.Sprite):
         # 边界反弹
         if self.rect.left < 0 or self.rect.right > SCREEN_WIDTH:
             self.speed_x = -self.speed_x
-
-    # ==================== 更新与射击 ====================
 
     def _update_image(self):
         """根据血量比例动态切换素材"""

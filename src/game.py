@@ -56,6 +56,11 @@ class Game:
         self.stars = [(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT),
                        random.randint(1, 3)) for _ in range(80)]
 
+        # HUD 缓存：避免每帧从磁盘加载图片和重新渲染文字
+        self.hud_icons = {}
+        self.hud_text_cache = {}
+        self._last_hud_values = {}
+
     def _init_fonts(self):
         """初始化字体，优先使用系统自带中文字体"""
         chinese_fonts = [
@@ -143,17 +148,14 @@ class Game:
             self._draw_stars()
 
         title = self.font_large.render("飞机大战 2026", True, COLOR_GOLD)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 160)))
-
-        # 操作说明
-        hints = [
-            "方向键 / WASD — 移动飞机",
-            "空格 / J — 射击",
-            "ESC — 暂停游戏",
-        ]
-        for i, hint in enumerate(hints):
-            hint_text = self.font_small.render(hint, True, COLOR_GRAY)
-            self.screen.blit(hint_text, hint_text.get_rect(center=(SCREEN_WIDTH//2, 500 + i * 30)))
+        title_rect = title.get_rect(center=(SCREEN_WIDTH//2, 160))
+        # 标题灰色半透明背景，仅覆盖标题文字范围
+        padding = 16
+        bg_rect = title_rect.inflate(padding * 2, padding * 2)
+        bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+        bg_surface.fill((60, 60, 60, 160))
+        self.screen.blit(bg_surface, bg_rect)
+        self.screen.blit(title, title_rect)
 
         btn_rect = pygame.Rect(SCREEN_WIDTH//2 - 100, 350, 200, 50)
         mx, my = pygame.mouse.get_pos()
@@ -288,6 +290,12 @@ class Game:
         # 补给自动投放计时
         self.supply_spawn_timer = 0
 
+        # 预加载 HUD 图标（避免每帧磁盘加载）
+        self.hud_icons["ammo"] = _try_load_image(IMG_AMMO, default_size=(32, 32))
+        self.hud_icons["hp"] = _try_load_image(IMG_PLAYER_PLANE, default_size=(32, 32))
+        self.hud_text_cache = {}
+        self._last_hud_values = {}
+
         # 开始背景音乐
         self.music_player.play_music()
 
@@ -315,11 +323,6 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.state = "paused"
                     return "pause"
-                if event.key == pygame.K_SPACE:
-                    for bullet in self.player.shoot():
-                        self.bullet_group.add(bullet)
-                        self.all_sprites.add(bullet)
-                    self.music_player.play_bullet()
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_j] or keys[pygame.K_SPACE]:
@@ -347,6 +350,9 @@ class Game:
         for enemy in self.enemy_group:
             if enemy.exploding:
                 continue
+            # 跳过冷却中或不能射击的敌机，减少不必要的函数调用开销
+            if not enemy.can_shoot or enemy.shoot_timer > 0:
+                continue
             bullets = enemy.shoot(self.player)
             for bullet in bullets:
                 self.enemy_bullet_group.add(bullet)
@@ -368,9 +374,9 @@ class Game:
     def _update_level(self):
         """根据分数切换关卡背景"""
         prev_level = self.current_level
-        if self.score >= 500 and self.current_level < 3:
+        if self.score >= 6000 and self.current_level < 3:
             self.current_level = 3
-        elif self.score >= 200 and self.current_level < 2:
+        elif self.score >= 3000 and self.current_level < 2:
             self.current_level = 2
 
         if self.current_level > prev_level:
@@ -385,9 +391,9 @@ class Game:
             self.supply_spawn_timer = 0
             x = random.randint(30, SCREEN_WIDTH - 30)
             y = -20
-            # 生命恢复概率随难度递增
+            # 生命恢复概率随难度递增；武器升级大幅降低出现率
             life_bounds = {"简单": 0.35, "普通": 0.55, "困难": 0.75}
-            shield_upper = {"简单": 0.75, "普通": 0.90, "困难": 0.95}
+            shield_upper = {"简单": 0.93, "普通": 0.96, "困难": 0.97}
             r = random.random()
             if r < 0.35:
                 p = BulletBox(x, y)
@@ -587,9 +593,9 @@ class Game:
                 self.music_player.play_upgrade()
 
     def _draw_gameplay(self):
-        # 背景 — 第三关静态显示，其他关卡循环滚动
+        # 背景 — 第一关循环滚动；第二关、第三关静态显示
         bg = self.backgrounds.get(self.current_level)
-        if self.current_level == 3:
+        if self.current_level >= 2:
             if bg:
                 self.screen.blit(bg, (0, 0))
             else:
@@ -629,35 +635,54 @@ class Game:
         pygame.display.flip()
 
     def _draw_hud(self):
-        """左上角 HUD：弹药图标+数值 | 血量图标+数值 | 武器等级"""
+        """左上角 HUD：弹药图标+数值 | 血量图标+数值 | 武器等级（缓存优化）"""
         margin_x = 16
         margin_y = 12
         row_gap = 40
         icon_size = 32
 
         # --- 弹药显示：ammo 图标 + 绝对数值 ---
-        ammo_icon = _try_load_image(IMG_AMMO, default_size=(icon_size, icon_size))
-        self.screen.blit(ammo_icon, (margin_x, margin_y))
-        ammo_text = self.font_medium.render(str(self.player.ammo), True, COLOR_WHITE)
-        self.screen.blit(ammo_text, (margin_x + icon_size + 8, margin_y - 2))
+        ammo_icon = self.hud_icons.get("ammo")
+        if ammo_icon:
+            self.screen.blit(ammo_icon, (margin_x, margin_y))
+        ammo_str = str(self.player.ammo)
+        if self._last_hud_values.get("ammo") != ammo_str:
+            self.hud_text_cache["ammo"] = self.font_medium.render(ammo_str, True, COLOR_WHITE)
+            self._last_hud_values["ammo"] = ammo_str
+        self.screen.blit(self.hud_text_cache.get("ammo"), (margin_x + icon_size + 8, margin_y - 2))
 
         # --- 血量显示：玩家飞机图标 + 数值 ---
-        hp_icon = _try_load_image(IMG_PLAYER_PLANE, default_size=(icon_size, icon_size))
-        self.screen.blit(hp_icon, (margin_x, margin_y + row_gap))
-        hp_text = self.font_medium.render(str(self.player.hp), True, COLOR_GREEN)
-        self.screen.blit(hp_text, (margin_x + icon_size + 8, margin_y + row_gap - 2))
+        hp_icon = self.hud_icons.get("hp")
+        if hp_icon:
+            self.screen.blit(hp_icon, (margin_x, margin_y + row_gap))
+        hp_str = str(self.player.hp)
+        if self._last_hud_values.get("hp") != hp_str:
+            self.hud_text_cache["hp"] = self.font_medium.render(hp_str, True, COLOR_GREEN)
+            self._last_hud_values["hp"] = hp_str
+        self.screen.blit(self.hud_text_cache.get("hp"), (margin_x + icon_size + 8, margin_y + row_gap - 2))
 
         # --- 武器等级 ---
-        lv_text = self.font_small.render(f"Lv.{self.player.weapon_level}", True, COLOR_GOLD)
-        self.screen.blit(lv_text, (margin_x, margin_y + row_gap * 2))
+        lv = self.player.weapon_level
+        if self._last_hud_values.get("weapon_level") != lv:
+            self.hud_text_cache["weapon_level"] = self.font_small.render(f"Lv.{lv}", True, COLOR_GOLD)
+            self._last_hud_values["weapon_level"] = lv
+        self.screen.blit(self.hud_text_cache.get("weapon_level"), (margin_x, margin_y + row_gap * 2))
 
         # --- 右上角：分数 ---
-        score_text = self.font_medium.render(f"{self.score}", True, COLOR_GOLD)
+        score_key = str(self.score)
+        if self._last_hud_values.get("score") != score_key:
+            self.hud_text_cache["score"] = self.font_medium.render(score_key, True, COLOR_GOLD)
+            self._last_hud_values["score"] = score_key
+        score_text = self.hud_text_cache.get("score")
         self.screen.blit(score_text, (SCREEN_WIDTH - score_text.get_width() - 16, 12))
 
         # --- 右上角：Boss 击杀数 ---
         if self.boss_kill_count > 0:
-            boss_text = self.font_small.render(f"Boss x{self.boss_kill_count}", True, COLOR_GOLD)
+            bk = self.boss_kill_count
+            if self._last_hud_values.get("boss_kill") != bk:
+                self.hud_text_cache["boss_kill"] = self.font_small.render(f"Boss x{bk}", True, COLOR_GOLD)
+                self._last_hud_values["boss_kill"] = bk
+            boss_text = self.hud_text_cache.get("boss_kill")
             self.screen.blit(boss_text, (SCREEN_WIDTH - boss_text.get_width() - 16, 48))
 
         # --- 护盾状态 ---
@@ -666,12 +691,12 @@ class Game:
             shield_seconds = max(0, self.player.shield_timer // FPS)
             # 最后3秒闪烁警告
             blink = self.player.shield_timer <= SHIELD_BLINK_START and (self.player.shield_timer // 15) % 2 == 0
-            if blink:
-                shield_color = (255, 80, 80)
-            else:
-                shield_color = (0, 200, 255)
-            shield_text = self.font_small.render(f"护盾 {shield_seconds}s", True, shield_color)
-            self.screen.blit(shield_text, (margin_x, margin_y + row_gap * 2 + 28))
+            shield_key = f"shield_{shield_seconds}_{blink}"
+            if self._last_hud_values.get("shield_key") != shield_key:
+                shield_color = (255, 80, 80) if blink else (0, 200, 255)
+                self.hud_text_cache["shield"] = self.font_small.render(f"护盾 {shield_seconds}s", True, shield_color)
+                self._last_hud_values["shield_key"] = shield_key
+            self.screen.blit(self.hud_text_cache.get("shield"), (margin_x, margin_y + row_gap * 2 + 28))
 
             # 护盾进度条
             bar_w = 100

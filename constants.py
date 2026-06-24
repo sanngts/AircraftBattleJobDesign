@@ -1,8 +1,3 @@
-# ============================================================
-# constants.py — 全局常量定义（纯配置文件，不含逻辑）
-# ============================================================
-
-# ---------- 窗口设置 ----------
 SCREEN_WIDTH = 480
 SCREEN_HEIGHT = 720
 FPS = 60
@@ -12,10 +7,6 @@ GAME_TITLE = "飞机大战"
 IMAGE_PATH = "assets/images/"
 SOUND_PATH = "assets/sounds/"
 FONT_PATH = "temp_place_fonts/"
-
-# ============================================================
-# 图片素材名称定义（对应 temp_place_game_assets/ 下的 .png 文件）
-# ============================================================
 
 # --- 游戏界面 UI ---
 IMG_BACKGROUND_1 = "background_1.png"
@@ -98,7 +89,7 @@ ENEMY_SPEED_MAX = 6         # 敌机最高速度（px/帧）
 ENEMY_SPAWN_INTERVAL = 30   # 敌机生成间隔（帧）
 ENEMY_HP_BASE = 1           # 敌机基础血量（将被 EnemyType 中具体值覆盖）
 ENEMY_SCORE_BASE = 10       # 击毁敌机基础得分
-BOSS_TRIGGER_KILLS = 30     # 消灭多少敌机后触发Boss
+BOSS_TRIGGER_KILLS = 45     # 消灭多少敌机后触发Boss
 
 # 各敌机类型基础血量（未乘难度倍率）
 ENEMY_HP = {
